@@ -1,1 +1,6 @@
 .vscode
+.vscode/
+.idea/
+.clang-format
+__pycache__/
+.idea

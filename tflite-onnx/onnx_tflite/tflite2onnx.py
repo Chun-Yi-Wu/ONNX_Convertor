@@ -1,13 +1,13 @@
-import onnx 
+import onnx
 import onnx.utils
 from onnx import helper
 from onnx import AttributeProto, TensorProto
 
-from conv_layers import Convolution,DepthwiseConvolution
-from aact_layers import Relu,Relu6,Softmax,LOGISTIC
-from core_layers import Dense,Reshape,Pad
+from conv_layers import Convolution, DepthwiseConvolution
+from aact_layers import Relu, Relu6, Softmax, LOGISTIC
+from core_layers import Dense, Reshape, Pad
 from merg_layers import Add
-from pool_layers import MaxPooling2D,AveragePooling2D,Mean
+from pool_layers import MaxPooling2D, AveragePooling2D, Mean
 import utils
 
 import os
@@ -108,46 +108,46 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
         op_name__sub_op_name__table[input_details[0]['name']] = [input_details[0]['name'],transpose_node.name]   
     else: 
         onnx_node_list = []
-        input_tensor_value_info = helper.make_tensor_value_info('input', TensorProto.FLOAT, utils.tflite2onnx_shape_map(input_details[0]['shape'].tolist()))
-        op_name__sub_op_name__table[input_details[0]['name']] = [input_details[0]['name'],input_tensor_value_info.name]  
+        input_tensor_value_info = helper.make_tensor_value_info('input', TensorProto.FLOAT, utils.tflite2onnx_shape_map(
+            input_details[0]['shape'].tolist()))
+        op_name__sub_op_name__table[input_details[0]['name']] = [input_details[0]['name'], input_tensor_value_info.name]
 
-
-    ############################
+        ############################
     # build model node by node #
     ############################
     for op in ops:
         node_output_detail = interpreter._get_tensor_details(op['outputs'][0])
         node_input_detail = interpreter._get_tensor_details(op['inputs'][0])
 
-        node_name = node_output_detail['name'] 
+        node_name = node_output_detail['name']
         prev_node_name = node_input_detail['name']
 
         if prev_node_name in op_name__sub_op_name__table:
-            prev_node_name = op_name__sub_op_name__table[prev_node_name][-1] # last sub node
+            prev_node_name = op_name__sub_op_name__table[prev_node_name][-1]  # last sub node
 
         op_type = op_types[op['opcode_index']]
         if op_type == 'CONV_2D':
-            nodes, val, weight = Convolution( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Convolution([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == 'DEPTHWISE_CONV_2D':
-            nodes, val, weight = DepthwiseConvolution( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = DepthwiseConvolution([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == 'SOFTMAX':
-            nodes, val, weight = Softmax( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Softmax([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == 'RELU':
-            nodes, val, weight = Relu( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Relu([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == 'RELU6':
-            nodes, val, weight = Relu6( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Relu6([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == 'LOGISTIC':
-            nodes, val, weight = LOGISTIC( [prev_node_name], op_type, op, interpreter).generate()       
+            nodes, val, weight = LOGISTIC([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == 'FULLY_CONNECTED':
-            nodes, val, weight = Dense( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Dense([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == 'RESHAPE':
-            nodes, val, weight = Reshape( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Reshape([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == 'PAD':
-            nodes, val, weight = Pad( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Pad([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == 'ADD':
-            nodes, val, weight = Add( '', op_type, op, interpreter).generate(op_name__sub_op_name__table)
+            nodes, val, weight = Add('', op_type, op, interpreter).generate(op_name__sub_op_name__table)
         elif op_type == 'MEAN':
-            nodes, val, weight = Mean( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Mean([prev_node_name], op_type, op, interpreter).generate()
         else:
             raise ValueError(op_type)
 
@@ -186,7 +186,7 @@ def main(model_path, model_json_path, model_save_path, add_transpose_for_channel
 
     input_init = [input_tensor_value_info]
     input_init.extend(onnx_weight_node_list)
-    onnx_inputs = utils.make_kneron_valid_onnx_input( input_init )
+    onnx_inputs = utils.make_kneron_valid_onnx_input(input_init)
 
     graph_cnn = helper.make_graph(
         onnx_node_list,
@@ -210,7 +210,7 @@ if __name__ == '__main__':
 
     model_path = args.tflite
     model_json_path = "./" + os.path.basename(model_path[:-7]) + ".json"
-    model_save_path = os.path.abspath(args.save_path) + '/' +os.path.basename(model_path[:-7]) + ".onnx"
+    model_save_path = os.path.abspath(args.save_path) + '/' + os.path.basename(model_path[:-7]) + ".onnx"
 
     os.system("./flatc/flatc -t --strict-json --defaults-json -o ./ ./flatc/schema.fbs -- " + model_path)
 

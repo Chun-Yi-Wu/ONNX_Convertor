@@ -6,9 +6,9 @@ from onnx import AttributeProto, TensorProto
 
 import numpy as np
 
-#from . import helper
+# from . import helper
 from base_layer import Layer
-#from .exceptions import FeatureNotImplemented, OnnxNotSupport
+# from .exceptions import FeatureNotImplemented, OnnxNotSupport
 import utils
 
 
@@ -27,8 +27,7 @@ class Dense(Layer):
       bias_array = self.tflite_interpreter.get_tensor(bias_node_info['index'])
 
       # transpose because shape define diffent between tflite and onnx
-      weights_array = np.transpose(weights_array, (1,0))
-
+        weights_array = np.transpose(weights_array, (1, 0))
 
       # make weight onnx node
       weight_onnx_node_name = fc_name + "_weight"
@@ -116,6 +115,7 @@ class Dense(Layer):
 
       return self.node_list, self.value_infos, self.weight_node_list
 
+
 class Reshape(Layer):
 
   def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
@@ -140,14 +140,13 @@ class Reshape(Layer):
       # update tables
       self.node_list.append(transpose_before_node)
 
-
       reshape_node_name = self.onnx_node_name
       shape_tensor_name = 'shape_tensor_' + self.onnx_node_name
       shape_node_name = 'shape_const_' + self.onnx_node_name
 
       new_shape = np.array(self.op_info['builtin_options']['new_shape'], dtype='int64')
-      shape_tensor = onnx.helper.make_tensor(shape_tensor_name,TensorProto.INT64,new_shape.shape, new_shape)
-      shape_node = helper.make_node("Constant",[],[shape_node_name],name=shape_node_name,value=shape_tensor)
+        shape_tensor = onnx.helper.make_tensor(shape_tensor_name, TensorProto.INT64, new_shape.shape, new_shape)
+        shape_node = helper.make_node("Constant", [], [shape_node_name], name=shape_node_name, value=shape_tensor)
 
       reshape_node = onnx.helper.make_node(
           'Reshape',
@@ -199,12 +198,13 @@ class Pad(Layer):
           # build node
       pad_name = self.onnx_node_name
       pad_node = helper.make_node(
-          'Pad', # op_type
-          self.previous_onnx_node_names, # 輸入
-          [pad_name], # 輸出
+            'Pad',  # op_type
+            self.previous_onnx_node_names,  # 輸入
+            [pad_name],  # 輸出
           mode='constant', 
-          value=0.0, #名為 value 的屬性，資料型別（AttributeType）為 FLOAT
-          pads=[0,0,0,0,0,0,pad_w,pad_h],#pad_param.flatten().tolist() #名為 pads 的屬性，資料型別（AttributeType）為 INTS 
+            value=0.0,  # 名為 value 的屬性，資料型別（AttributeType）為 FLOAT
+            pads=[0, 0, 0, 0, 0, 0, pad_w, pad_h],
+            # pad_param.flatten().tolist() #名為 pads 的屬性，資料型別（AttributeType）為 INTS
           name=pad_name 
       )
 
