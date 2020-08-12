@@ -112,22 +112,24 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     interpreter = tf.lite.Interpreter(model_path)
     interpreter.allocate_tensors()
 
-    # get input info
+    # get model input info(assume there is only one input)
     input_details = interpreter.get_input_details()
+    model_input_name  = input_details[0]['name']
+    model_input_shape = input_details[0]['shape'].tolist()
     input_tensor_value_info = None
 
     if add_transpose_for_channel_last_first_issue is True:
-        input_tensor_value_info = helper.make_tensor_value_info('input', TensorProto.FLOAT, input_details[0]['shape'].tolist())
+        input_tensor_value_info = helper.make_tensor_value_info(model_input_name, TensorProto.FLOAT, model_input_shape)
         # transpose for channel last to channel first
         transpose_node = build_head_transpose_node_for_channel_last_2_channel_first(input_tensor_value_info.name)
 
         # update tables
         onnx_node_list = [transpose_node]
-        op_name__sub_op_name__table[input_details[0]['name']] = [input_details[0]['name'],transpose_node.name]   
+        op_name__sub_op_name__table[model_input_name] = [model_input_name, transpose_node.name]   
     else: 
         onnx_node_list = []
-        input_tensor_value_info = helper.make_tensor_value_info('input', TensorProto.FLOAT, utils.tflite2onnx_shape_map(input_details[0]['shape'].tolist()))
-        op_name__sub_op_name__table[input_details[0]['name']] = [input_details[0]['name'],input_tensor_value_info.name]  
+        input_tensor_value_info = helper.make_tensor_value_info(model_input_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(model_input_shape))
+        op_name__sub_op_name__table[model_input_name] = [model_input_name, input_tensor_value_info.name]  
 
 
     # generate tree
@@ -142,7 +144,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     for key in tree_dict:
 
         node_name = key
-        prev_node_name = tree_dict[key].input_nodes_name[0] if tree_dict[key].input_nodes_name != [] else 'input'
+        prev_node_name = tree_dict[key].input_nodes_name[0] if tree_dict[key].input_nodes_name != [] else model_input_name
 
         if prev_node_name in op_name__sub_op_name__table:
             prev_node_name = op_name__sub_op_name__table[prev_node_name][-1] # last sub node
