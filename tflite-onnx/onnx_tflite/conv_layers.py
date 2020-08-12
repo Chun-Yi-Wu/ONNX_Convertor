@@ -5,6 +5,7 @@ from onnx import helper
 from onnx import AttributeProto, TensorProto
 import numpy as np
 from base_layer import Layer
+from aact_layers import defused_activation_node_generator
 import utils
 import warnings
 
@@ -16,11 +17,19 @@ from tflite.Padding import Padding
 
 class Convolution(Layer):
 
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
 
       self.tflite_conv_parser = Conv2DOptions()
-      self.tflite_conv_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)   
+      self.tflite_conv_parser.Init(op.BuiltinOptions().Bytes, op.BuiltinOptions().Pos)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+      self.tflite_conv_parser = Conv2DOptions()
+      self.tflite_conv_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
+
+      return self
 
   def generate(self):
 
@@ -35,11 +44,11 @@ class Convolution(Layer):
       strides_len = [self.tflite_conv_parser.StrideW(),self.tflite_conv_parser.StrideH()]
       dilation_factor = [self.tflite_conv_parser.DilationWFactor(), self.tflite_conv_parser.DilationHFactor()]
 
-      padding_stradegy = 'NONE' 
+      padding_stradegy = 'NONE'
       if self.tflite_conv_parser.Padding() is Padding.SAME:
-          padding_stradegy = 'SAME' 
+          padding_stradegy = 'SAME'
       elif self.tflite_conv_parser.Padding() is Padding.VALID:
-          padding_stradegy = 'VALID' 
+          padding_stradegy = 'VALID'
 
       input_feature_map_shape = self.node_input_detail['shape']
 
@@ -122,14 +131,29 @@ class Convolution(Layer):
 
       return self.node_list, self.value_infos, self.weight_node_list
 
+  def defuse_activation_function(self):
+      return defused_activation_node_generator(
+          activation_function_type=self.tflite_conv_parser.FusedActivationFunction(),
+          op=self.op,
+          op_type=self.op_type,
+          tflite_interpreter=self.tflite_interpreter)
+
 
 class DepthwiseConvolution(Layer):
 
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-      
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
+
       self.tflite_conv_parser = DepthwiseConv2DOptions()
-      self.tflite_conv_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos) 
+      self.tflite_conv_parser.Init(self.op.BuiltinOptions().Bytes, self.op.BuiltinOptions().Pos)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+      self.tflite_conv_parser = DepthwiseConv2DOptions()
+      self.tflite_conv_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
+
+      return self
 
   def generate(self):
 
@@ -145,14 +169,14 @@ class DepthwiseConvolution(Layer):
       strides_len = [self.tflite_conv_parser.StrideW(),self.tflite_conv_parser.StrideH()]
       dilation_factor = [self.tflite_conv_parser.DilationWFactor(),self.tflite_conv_parser.DilationHFactor()]
 
-      padding_stradegy = 'NONE' 
+      padding_stradegy = 'NONE'
       if self.tflite_conv_parser.Padding() is Padding.SAME:
-          padding_stradegy = 'SAME' 
+          padding_stradegy = 'SAME'
       elif self.tflite_conv_parser.Padding() is Padding.VALID:
-          padding_stradegy = 'VALID' 
+          padding_stradegy = 'VALID'
 
       input_feature_map_shape = self.node_input_detail['shape']
-     
+
 
       # transpose because shape define diffent between tflite and onnx
       weights_array = np.transpose(weights_array, (3, 0, 1, 2))
@@ -234,11 +258,21 @@ class DepthwiseConvolution(Layer):
 
       return self.node_list, self.value_infos, self.weight_node_list
 
+  def defuse_activation_function(self):
+      return defused_activation_node_generator(
+          activation_function_type=self.tflite_conv_parser.FusedActivationFunction(),
+          op=self.op,
+          op_type=self.op_type,
+          tflite_interpreter=self.tflite_interpreter)
+
 
 class ResizeNearestNeighbor(Layer):
 
-    def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+    def __init__(self, op, op_type, tflite_interpreter):
+        Layer.__init__(self, op, op_type, tflite_interpreter)
+
+    def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+        return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
     def generate(self):
         if utils.ONNX_VERSION_1_4_1 == onnx.__version__:
@@ -303,10 +337,14 @@ class ResizeNearestNeighbor(Layer):
 
         return self.node_list, self.value_infos, self.weight_node_list
 
+
 class ResizeBilinear(Layer):
 
-    def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+    def __init__(self, op, op_type, tflite_interpreter):
+        Layer.__init__(self, op, op_type, tflite_interpreter)
+
+    def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+        return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
     def generate(self):
         if utils.ONNX_VERSION_1_4_1 == onnx.__version__:
@@ -371,13 +409,19 @@ class ResizeBilinear(Layer):
 
         return self.node_list, self.value_infos, self.weight_node_list
 
+
 class TransposeConvolution(Layer):
 
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
       self.tflite_tconv_parser = TransposeConvOptions()
-      self.tflite_tconv_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)   
+      self.tflite_tconv_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
+
+      return self
 
   def generate(self):
 
@@ -393,11 +437,11 @@ class TransposeConvolution(Layer):
 
       strides_len = [self.tflite_tconv_parser.StrideW(),self.tflite_tconv_parser.StrideH()]
 
-      padding_stradegy = 'NONE' 
+      padding_stradegy = 'NONE'
       if self.tflite_tconv_parser.Padding() is Padding.SAME:
-          padding_stradegy = 'SAME' 
+          padding_stradegy = 'SAME'
       elif self.tflite_tconv_parser.Padding() is Padding.VALID:
-          padding_stradegy = 'VALID' 
+          padding_stradegy = 'VALID'
 
       input_feature_map_shape = self.node_input_detail['shape']
 

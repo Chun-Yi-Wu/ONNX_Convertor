@@ -5,6 +5,7 @@ from onnx import helper
 from onnx import AttributeProto, TensorProto
 import numpy as np
 from base_layer import Layer
+from aact_layers import defused_activation_node_generator
 import utils
 
 from tflite.AddOptions import AddOptions
@@ -43,11 +44,19 @@ def make_onnx_channelwise_constant_number(tflite_interpreter, constant_details):
 
 class Add(Layer):
 
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
 
       self.tflite_add_parser = AddOptions()
-      self.tflite_add_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos) 
+      self.tflite_add_parser.Init(self.op.BuiltinOptions().Bytes, self.op.BuiltinOptions().Pos)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+      self.tflite_add_parser = AddOptions()
+      self.tflite_add_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
+
+      return self
 
   def generate(self, op_name__sub_op_name__table):
       prev_node_names = []
@@ -111,13 +120,28 @@ class Add(Layer):
 
       return self.node_list, self.value_infos, self.weight_node_list
 
+  def defuse_activation_function(self):
+      return defused_activation_node_generator(
+          activation_function_type=self.tflite_add_parser.FusedActivationFunction(),
+          op=self.op,
+          op_type=self.op_type,
+          tflite_interpreter=self.tflite_interpreter)
+
 class Concatenation(Layer):
 
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
 
       self.tflite_concat_parser = ConcatenationOptions()
-      self.tflite_concat_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos) 
+      self.tflite_concat_parser.Init(self.op.BuiltinOptions().Bytes, self.op.BuiltinOptions().Pos)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+      self.tflite_concat_parser = ConcatenationOptions()
+      self.tflite_concat_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
+
+      return self
 
   def generate(self,op_name__sub_op_name__table):
 
@@ -170,14 +194,28 @@ class Concatenation(Layer):
 
       return self.node_list, self.value_infos, self.weight_node_list
 
+  def defuse_activation_function(self):
+      return defused_activation_node_generator(
+          activation_function_type=self.tflite_concat_parser.FusedActivationFunction(),
+          op=self.op,
+          op_type=self.op_type,
+          tflite_interpreter=self.tflite_interpreter)
 
 class Mul(Layer):
 
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
 
       self.tflite_mul_parser = MulOptions()
-      self.tflite_mul_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos) 
+      self.tflite_mul_parser.Init(self.op.BuiltinOptions().Bytes, self.op.BuiltinOptions().Pos)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+      self.tflite_mul_parser = MulOptions()
+      self.tflite_mul_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
+
+      return self
 
   def generate(self, op_name__sub_op_name__table):
       prev_node_names = []
@@ -240,3 +278,10 @@ class Mul(Layer):
           self.node_list.append(relu_node)
 
       return self.node_list, self.value_infos, self.weight_node_list
+
+  def defuse_activation_function(self):
+      return defused_activation_node_generator(
+          activation_function_type=self.tflite_mul_parser.FusedActivationFunction(),
+          op=self.op,
+          op_type=self.op_type,
+          tflite_interpreter=self.tflite_interpreter)

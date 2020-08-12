@@ -147,45 +147,45 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
         op_type = tflite_op_types[idx]
         print("converting node name: " + node_name) 
         if op_type == BuiltinOperator.CONV_2D:
-            nodes, val, weight = Convolution( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Convolution(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.DEPTHWISE_CONV_2D:
-            nodes, val, weight = DepthwiseConvolution( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = DepthwiseConvolution(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.SOFTMAX:
-            nodes, val, weight = Softmax( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Softmax(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.RELU:
-            nodes, val, weight = Relu( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Relu(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.RELU6:
-            nodes, val, weight = Relu6( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Relu6(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.PRELU:
-            nodes, val, weight = PRelu( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = PRelu(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.LOGISTIC:
-            nodes, val, weight = LOGISTIC( [prev_node_name], op_type, op, interpreter).generate()       
+            nodes, val, weight = LOGISTIC(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.FULLY_CONNECTED:
-            nodes, val, weight = Dense( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Dense(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.RESHAPE:
-            nodes, val, weight = Reshape( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Reshape(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.PAD:
-            nodes, val, weight = Pad( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Pad(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.ADD:
-            nodes, val, weight = Add( '', op_type, op, interpreter).generate(op_name__sub_op_name__table)
+            nodes, val, weight = Add(op, op_type, interpreter).init_generate('', op_type, op, interpreter).generate(op_name__sub_op_name__table)
         elif op_type == BuiltinOperator.MUL:
-            nodes, val, weight = Mul( '', op_type, op, interpreter).generate(op_name__sub_op_name__table)
+            nodes, val, weight = Mul(op, op_type, interpreter).init_generate('', op_type, op, interpreter).generate(op_name__sub_op_name__table)
         elif op_type == BuiltinOperator.CONCATENATION:
-            nodes, val, weight = Concatenation( '', op_type, op, interpreter).generate(op_name__sub_op_name__table)
+            nodes, val, weight = Concatenation(op, op_type, interpreter).init_generate('', op_type, op, interpreter).generate(op_name__sub_op_name__table)
         elif op_type == BuiltinOperator.MEAN:
-            nodes, val, weight = Mean( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Mean(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.MAX_POOL_2D:
-            nodes, val, weight = MaxPooling2D( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = MaxPooling2D(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.AVERAGE_POOL_2D:
-            nodes, val, weight = AveragePooling2D( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = AveragePooling2D(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.SQUEEZE:
-            nodes, val, weight = Squeeze( [prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = Squeeze(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.RESIZE_NEAREST_NEIGHBOR:
-            nodes, val, weight = ResizeNearestNeighbor([prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = ResizeNearestNeighbor(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.RESIZE_BILINEAR:
-            nodes, val, weight = ResizeBilinear([prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = ResizeBilinear(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.L2_NORMALIZATION:
-            nodes, val, weight = L2Normalization([prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = L2Normalization(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         elif op_type == BuiltinOperator.TRANSPOSE_CONV:
             # transpose conv is very different from others of input position
             prev_node_name = interpreter._get_tensor_details(op.Inputs(2))['name']
@@ -193,7 +193,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
             if prev_node_name in op_name__sub_op_name__table:
                 prev_node_name = op_name__sub_op_name__table[prev_node_name][-1] # last sub node
 
-            nodes, val, weight = TransposeConvolution([prev_node_name], op_type, op, interpreter).generate()
+            nodes, val, weight = TransposeConvolution(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
         else:
             raise ValueError(op_type)
 

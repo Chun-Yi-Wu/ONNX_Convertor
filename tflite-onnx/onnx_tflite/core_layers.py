@@ -5,6 +5,7 @@ from onnx import helper
 from onnx import AttributeProto, TensorProto
 import numpy as np
 from base_layer import Layer
+from aact_layers import defused_activation_node_generator
 import utils
 
 from tflite.ReshapeOptions import ReshapeOptions
@@ -15,11 +16,19 @@ from tflite.ActivationFunctionType import ActivationFunctionType
 
 class Dense(Layer):
 
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
 
       self.tflite_fc_parser = FullyConnectedOptions()
-      self.tflite_fc_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)  
+      self.tflite_fc_parser.Init(self.op.BuiltinOptions().Bytes, self.op.BuiltinOptions().Pos)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+      self.tflite_fc_parser = FullyConnectedOptions()
+      self.tflite_fc_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
+
+      return self
 
   def generate(self):
       
@@ -131,13 +140,25 @@ class Dense(Layer):
 
       return self.node_list, self.value_infos, self.weight_node_list
 
+  def defuse_activation_function(self):
+      return defused_activation_node_generator(
+          activation_function_type=self.tflite_fc_parser.FusedActivationFunction(),
+          op=self.op,
+          op_type=self.op_type,
+          tflite_interpreter=self.tflite_interpreter)
+
 class Reshape(Layer):
 
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
       self.tflite_reshape_parser = ReshapeOptions()
-      self.tflite_reshape_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)  
+      self.tflite_reshape_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
+
+      return self
 
   def generate(self):
       out_dim = self.node_output_detail['shape']
@@ -205,8 +226,11 @@ class Reshape(Layer):
 
 class Pad(Layer):
 
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
   def generate(self):
       # tflite pad :[[0 0]
@@ -246,11 +270,16 @@ class Pad(Layer):
 
 class Squeeze(Layer):
 
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
       self.tflite_squeeze_parser = SqueezeOptions()
-      self.tflite_squeeze_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos) 
+      self.tflite_squeeze_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
+
+      return self
 
   def generate(self):
       squeeze_node_name = self.onnx_node_name
@@ -269,11 +298,16 @@ class Squeeze(Layer):
 
 class L2Normalization(Layer):
 
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
       self.tflite_l2norm_parser = L2NormOptions()
-      self.tflite_l2norm_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos) 
+      self.tflite_l2norm_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
+
+      return self
 
   def generate(self):
       l2norm_node_name = self.onnx_node_name

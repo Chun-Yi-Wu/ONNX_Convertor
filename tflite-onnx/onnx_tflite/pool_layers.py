@@ -5,6 +5,7 @@ from onnx import helper
 from onnx import AttributeProto, TensorProto
 import numpy as np
 from base_layer import Layer
+from aact_layers import defused_activation_node_generator
 import utils
 
 from tflite.ReducerOptions import ReducerOptions
@@ -13,11 +14,16 @@ from tflite.Padding import Padding
 from tflite.ActivationFunctionType import ActivationFunctionType
 
 class MaxPooling2D(Layer):
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
       self.tflite_maxpool_parser = Pool2DOptions()
-      self.tflite_maxpool_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)  
+      self.tflite_maxpool_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
+
+      return self
 
   def generate(self):
       kernel_shape = [self.tflite_maxpool_parser.FilterWidth(),self.tflite_maxpool_parser.FilterHeight()]
@@ -80,14 +86,28 @@ class MaxPooling2D(Layer):
 
       return self.node_list, self.value_infos, self.weight_node_list
 
+  def defuse_activation_function(self):
+      return defused_activation_node_generator(
+          activation_function_type=self.tflite_maxpool_parser.FusedActivationFunction(),
+          op=self.op,
+          op_type=self.op_type,
+          tflite_interpreter=self.tflite_interpreter)
 
 class AveragePooling2D(Layer):
 
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
 
       self.tflite_avgpool_parser = Pool2DOptions()
-      self.tflite_avgpool_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos) 
+      self.tflite_avgpool_parser.Init(self.op.BuiltinOptions().Bytes, self.op.BuiltinOptions().Pos)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+      self.tflite_avgpool_parser = Pool2DOptions()
+      self.tflite_avgpool_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
+
+      return self
 
   def generate(self):
       kernel_shape = [self.tflite_avgpool_parser.FilterWidth(),self.tflite_avgpool_parser.FilterHeight()]
@@ -150,14 +170,28 @@ class AveragePooling2D(Layer):
 
       return self.node_list, self.value_infos, self.weight_node_list
 
+  def defuse_activation_function(self):
+      return defused_activation_node_generator(
+          activation_function_type=self.tflite_avgpool_parser.FusedActivationFunction(),
+          op=self.op,
+          op_type=self.op_type,
+          tflite_interpreter=self.tflite_interpreter)
 
 class Mean(Layer):
 
-  def __init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      Layer.__init__(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+  def __init__(self, op, op_type, tflite_interpreter):
+      Layer.__init__(self, op, op_type, tflite_interpreter)
 
       self.tflite_mean_parser = ReducerOptions()
-      self.tflite_mean_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)  
+      self.tflite_mean_parser.Init(self.op.BuiltinOptions().Bytes, self.op.BuiltinOptions().Pos)
+
+  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
+      Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+
+      self.tflite_mean_parser = ReducerOptions()
+      self.tflite_mean_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
+
+      return self
 
   def generate(self):
       flag_keep_dims = self.tflite_mean_parser.KeepDims()
