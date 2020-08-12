@@ -20,6 +20,8 @@ import tflite
 from tflite.BuiltinOperator import BuiltinOperator
 from tflite.Model import Model
 
+from tree_structure import Tree
+
 def read_tflite_model(path):
     data = open(path, "rb").read()
     model = Model.GetRootAsModel(bytearray(data), 0)
@@ -97,7 +99,7 @@ def build_head_transpose_node_for_channel_last_2_channel_first(input_name):
     return transpose_node
 
 def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue = True):
-    
+
     # some nodes are merged as one node, we need a table to store this information
     op_name__sub_op_name__table = {}
 
@@ -105,9 +107,6 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     output_tensor_value_info = []
     onnx_node_list = []
     inner_node_shape_value_info = []
-
-    # parse operator information through flatc python module
-    tflite_ops, tflite_op_types = get_op_info(model_path)
 
     # parse node information through tflite interpreter (tflite interpreter can't parse operator information in our target tensorflow version 1.15)
     interpreter = tf.lite.Interpreter(model_path)
@@ -131,71 +130,31 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
         op_name__sub_op_name__table[input_details[0]['name']] = [input_details[0]['name'],input_tensor_value_info.name]  
 
 
+    # generate tree
+    tree_graph = Tree(model_path=model_path, defused=False)
+
+    # get tree node in the form of {node_name: op_node_obj}
+    tree_dict = tree_graph.get_nodes()
+
     ############################
     # build model node by node #
     ############################
-    for idx,op in enumerate(tflite_ops):
-        node_output_detail = interpreter._get_tensor_details(op.Outputs(0))
-        node_input_detail = interpreter._get_tensor_details(op.Inputs(0))
+    for key in tree_dict:
 
-        node_name = node_output_detail['name'] 
-        prev_node_name = node_input_detail['name']
+        node_name = key
+        prev_node_name = tree_dict[key].input_nodes_name[0] if tree_dict[key].input_nodes_name != [] else 'input'
 
         if prev_node_name in op_name__sub_op_name__table:
             prev_node_name = op_name__sub_op_name__table[prev_node_name][-1] # last sub node
 
-        op_type = tflite_op_types[idx]
-        print("converting node name: " + node_name) 
-        if op_type == BuiltinOperator.CONV_2D:
-            nodes, val, weight = Convolution(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.DEPTHWISE_CONV_2D:
-            nodes, val, weight = DepthwiseConvolution(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.SOFTMAX:
-            nodes, val, weight = Softmax(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.RELU:
-            nodes, val, weight = Relu(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.RELU6:
-            nodes, val, weight = Relu6(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.PRELU:
-            nodes, val, weight = PRelu(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.LOGISTIC:
-            nodes, val, weight = LOGISTIC(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.FULLY_CONNECTED:
-            nodes, val, weight = Dense(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.RESHAPE:
-            nodes, val, weight = Reshape(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.PAD:
-            nodes, val, weight = Pad(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.ADD:
-            nodes, val, weight = Add(op, op_type, interpreter).init_generate('', op_type, op, interpreter).generate(op_name__sub_op_name__table)
-        elif op_type == BuiltinOperator.MUL:
-            nodes, val, weight = Mul(op, op_type, interpreter).init_generate('', op_type, op, interpreter).generate(op_name__sub_op_name__table)
-        elif op_type == BuiltinOperator.CONCATENATION:
-            nodes, val, weight = Concatenation(op, op_type, interpreter).init_generate('', op_type, op, interpreter).generate(op_name__sub_op_name__table)
-        elif op_type == BuiltinOperator.MEAN:
-            nodes, val, weight = Mean(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.MAX_POOL_2D:
-            nodes, val, weight = MaxPooling2D(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.AVERAGE_POOL_2D:
-            nodes, val, weight = AveragePooling2D(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.SQUEEZE:
-            nodes, val, weight = Squeeze(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.RESIZE_NEAREST_NEIGHBOR:
-            nodes, val, weight = ResizeNearestNeighbor(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.RESIZE_BILINEAR:
-            nodes, val, weight = ResizeBilinear(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.L2_NORMALIZATION:
-            nodes, val, weight = L2Normalization(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
-        elif op_type == BuiltinOperator.TRANSPOSE_CONV:
-            # transpose conv is very different from others of input position
-            prev_node_name = interpreter._get_tensor_details(op.Inputs(2))['name']
+        op_type = tree_dict[key].op_type
+        op = tree_dict[key].op
 
-            if prev_node_name in op_name__sub_op_name__table:
-                prev_node_name = op_name__sub_op_name__table[prev_node_name][-1] # last sub node
-
-            nodes, val, weight = TransposeConvolution(op, op_type, interpreter).init_generate([prev_node_name], op_type, op, interpreter).generate()
+        if op_type in [BuiltinOperator.ADD, BuiltinOperator.MUL, BuiltinOperator.CONCATENATION]:
+            nodes, val, weight = tree_dict[key].init_generate([prev_node_name], op_type, op, interpreter).generate(op_name__sub_op_name__table)
         else:
-            raise ValueError(op_type)
+            nodes, val, weight = tree_dict[key].init_generate([prev_node_name], op_type, op, interpreter).generate()
+
 
         sub_op_node_list = []
         for node in nodes:
