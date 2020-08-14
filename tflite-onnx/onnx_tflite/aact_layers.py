@@ -5,35 +5,42 @@ import onnx
 from onnx import helper
 from onnx import AttributeProto, TensorProto
 from tflite.ActivationFunctionType import ActivationFunctionType
+from tflite.BuiltinOperator import BuiltinOperator
 import numpy as np
 from base_layer import Layer
 import utils
 import warnings
 
 
-def defused_activation_node_generator(activation_function_type: int, op, op_type, tflite_interpreter):
+def defused_activation_node_generator(activation_function_type: int, op, tflite_interpreter):
+
     if ActivationFunctionType.NONE == activation_function_type:
-        return None
+        defused_activation_node = None
+
     elif ActivationFunctionType.RELU == activation_function_type:
-        return ReluDefused(op=op, op_type=op_type, tflite_interpreter=tflite_interpreter)
+        defused_activation_node = ReluDefused(op=op, op_type=BuiltinOperator.RELU, tflite_interpreter=tflite_interpreter)
+
     elif ActivationFunctionType.RELU_N1_TO_1 == activation_function_type:
-        warnings.warn('Not Support {} Fused Activation Currently.'.format('RELU_N1_TO_1'),
-                      UserWarning)
-        return None
+        warnings.warn('Not Support {} Fused Activation Currently.'.format('RELU_N1_TO_1'), UserWarning)
+        defused_activation_node = None
+
     elif ActivationFunctionType.RELU6 == activation_function_type:
-        return Relu6Defused(op=op, op_type=op_type, tflite_interpreter=tflite_interpreter)
+        defused_activation_node = Relu6Defused(op=op, op_type=BuiltinOperator.RELU6, tflite_interpreter=tflite_interpreter)
+
     elif ActivationFunctionType.TANH == activation_function_type:
-        warnings.warn('Not Support {} Fused Activation Currently.'.format('TANH'),
-                      UserWarning)
-        return None
+        warnings.warn('Not Support {} Fused Activation Currently.'.format('TANH'), UserWarning)
+        defused_activation_node = None
+
     elif ActivationFunctionType.SIGN_BIT == activation_function_type:
-        warnings.warn('Not Support {} Fused Activation Currently.'.format('SIGN_BIT'),
-                      UserWarning)
-        return None
+        warnings.warn('Not Support {} Fused Activation Currently.'.format('SIGN_BIT'), UserWarning)
+        defused_activation_node = None
+
     else:
-        warnings.warn('Fused Activation Type {} Not in Specification.'.format(activation_function_type),
-                      UserWarning)
-        return None
+        warnings.warn('Fused Activation Type {} Not in Specification.'.format(activation_function_type), UserWarning)
+        defused_activation_node = None
+
+
+    return defused_activation_node
 
 
 # Defused Activation Layer
@@ -44,7 +51,8 @@ class ActivationDefused(Layer, metaclass=abc.ABCMeta):
         self.node_name = '{}_Fused'.format(self.node_name)
 
     def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        #return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        return self
 
 
 class ReluDefused(ActivationDefused):
@@ -53,19 +61,21 @@ class ReluDefused(ActivationDefused):
         ActivationDefused.__init__(self, op, op_type, tflite_interpreter)
 
     def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        return ActivationDefused.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        #return ActivationDefused.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        return self
 
     def generate(self):
         relu_name = self.node_name
         relu_node = helper.make_node("Relu",
                                      name=relu_name,
-                                     inputs=[self.onnx_node_name],
+                                     inputs=self.input_nodes_name,
                                      outputs=[relu_name])
 
+        node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
         out_shape_info = onnx.helper.make_tensor_value_info(
             relu_name,
             TensorProto.FLOAT,
-            utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+            utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
 
         self.value_infos.append(out_shape_info)
@@ -80,22 +90,24 @@ class Relu6Defused(ActivationDefused):
         ActivationDefused.__init__(self, op, op_type, tflite_interpreter)
 
     def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        return ActivationDefused.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        #return ActivationDefused.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        return self
 
     def generate(self):
         clip_name = self.node_name
         clip_node = helper.make_node(
             'Clip',
-            inputs=[self.onnx_node_name],
+            inputs=self.input_nodes_name,
             outputs=[clip_name],
             min=0.0,
             max=6.0,
             name=clip_name)
 
+        node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
         out_shape_info = helper.make_tensor_value_info(
             clip_name,
             TensorProto.FLOAT,
-            utils.tflite2onnx_shape_map((self.node_output_detail['shape'].tolist()))
+            utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
 
         self.value_infos.append(out_shape_info)
@@ -111,21 +123,23 @@ class Relu(Layer):
         Layer.__init__(self, op, op_type, tflite_interpreter)
 
     def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        #return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        return self
 
     def generate(self):
         relu_node = helper.make_node(
             "Relu",
-            name=self.onnx_node_name,
-            inputs=self.previous_onnx_node_names,
-            outputs=[self.onnx_node_name]
+            name=self.node_name,
+            inputs=self.input_nodes_name,
+            outputs=[self.node_name]
         )
 
         # original layer output
+        node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
         out_shape_info = onnx.helper.make_tensor_value_info(
             self.onnx_node_name,
             TensorProto.FLOAT,
-            utils.tflite2onnx_shape_map(self.node_output_detail['shape'].tolist())
+            utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
 
         self.value_infos.append(out_shape_info)
@@ -140,23 +154,25 @@ class Relu6(Layer):
         Layer.__init__(self, op, op_type, tflite_interpreter)
 
     def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        #return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        return self
 
     def generate(self):
         clip_node = onnx.helper.make_node(
             'Clip',
-            inputs=self.previous_onnx_node_names,
-            outputs=[self.onnx_node_name],
+            inputs=self.input_nodes_name,
+            outputs=[self.node_name],
             min=0.0,
             max=6.0,
-            name=self.onnx_node_name
+            name=self.node_name
         )
 
         # original layer output
+        node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
         out_shape_info = onnx.helper.make_tensor_value_info(
-            self.onnx_node_name,
+            self.node_name,
             TensorProto.FLOAT,
-            utils.tflite2onnx_shape_map(self.node_output_detail['shape'].tolist())
+            utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
 
         self.value_infos.append(out_shape_info)
@@ -171,13 +187,14 @@ class LOGISTIC(Layer):
         Layer.__init__(self, op, op_type, tflite_interpreter)
 
     def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        #return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        return self
 
     def generate(self):
-        logistic_name = self.onnx_node_name
+        logistic_name = self.node_name
         logistic_node = helper.make_node(
             op_type='Sigmoid',
-            inputs=self.previous_onnx_node_names,
+            inputs=self.input_nodes_name,
             outputs=[logistic_name],
             name=logistic_name
         )
@@ -192,13 +209,14 @@ class Softmax(Layer):
         Layer.__init__(self, op, op_type, tflite_interpreter)
 
     def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        #return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        return self
 
     def generate(self):
-        softmax_node_name = self.onnx_node_name
+        softmax_node_name = self.node_name
         softmax_node = onnx.helper.make_node(
             'Softmax',
-            inputs=self.previous_onnx_node_names,
+            inputs=self.input_nodes_name,
             outputs=[softmax_node_name],
             name=softmax_node_name
         )
@@ -213,15 +231,16 @@ class PRelu(Layer):
         Layer.__init__(self, op, op_type, tflite_interpreter)
 
     def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        #return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
+        return self
 
     def generate(self):
-        slope_node_info = self.tflite_interpreter._get_tensor_details(self.op_info.Inputs(1))
+        slope_node_info = self.tflite_interpreter._get_tensor_details(self.op.Inputs(1))
         slope_array = self.tflite_interpreter.get_tensor(slope_node_info['index'])
         slope_array = np.transpose(slope_array, (2, 0, 1))
 
         # make slope onnx node
-        slope_onnx_node_name = self.onnx_node_name + "_slope"
+        slope_onnx_node_name = self.node_name + "_slope"
         slope_onnx_node = onnx.helper.make_tensor(
             slope_onnx_node_name,
             TensorProto.FLOAT,
@@ -230,20 +249,22 @@ class PRelu(Layer):
         )
         self.weight_node_list.append(slope_onnx_node)
 
-        self.previous_onnx_node_names.extend([slope_onnx_node_name])
+        previous_onnx_node_names = self.input_nodes_name.copy()
+        previous_onnx_node_names.extend([slope_onnx_node_name])
         prelu_node = onnx.helper.make_node(
             'PRelu',
-            inputs=self.previous_onnx_node_names,
-            outputs=[self.onnx_node_name],
-            name=self.onnx_node_name
+            inputs=previous_onnx_node_names,
+            outputs=[self.node_name],
+            name=self.node_name
         )
         self.node_list.append(prelu_node)
 
         # original layer output
+        node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
         out_shape_info = onnx.helper.make_tensor_value_info(
-            self.onnx_node_name,
+            self.node_name,
             TensorProto.FLOAT,
-            utils.tflite2onnx_shape_map(self.node_output_detail['shape'].tolist())
+            utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
         self.value_infos.append(out_shape_info)
 

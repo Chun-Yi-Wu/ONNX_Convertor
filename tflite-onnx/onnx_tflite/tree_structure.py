@@ -42,6 +42,8 @@ class Tree:
         self.__eliminate_side_input()
         self.__init_outputs_node_info()
         self.__defused(enable_defuse=defused)
+        self.__init_graph_inputs_node()
+        self.__init_graph_outputs_node()
 
     def __init_op_info(self, model_path):
         self.__tflite_ops = []
@@ -152,12 +154,34 @@ class Tree:
                     output_node.input_nodes_name.remove(output_node_inputs_remove_node_name)
                     output_node.input_nodes_name.append(output_node_inputs_add_node_name)
 
+                # defused node is not head node
+                defused_activation_node.is_head_node = False
+
+                # origin node is not buttom node
+                defused_activation_node.is_bottom_node = node.is_bottom_node
+                node.is_bottom_node = False
+
                 # add fused node
                 add_defused_activation_node_list.append(defused_activation_node)
 
         # add fused node
         for defused_activation_node in add_defused_activation_node_list:
             self.__nodes[defused_activation_node.node_name] = defused_activation_node
+
+    def __init_graph_inputs_node(self):
+        self.__head_nodes = []
+
+        for node_name in self.__nodes:
+            if True is self.__nodes[node_name].is_head_node:
+                self.__head_nodes.append(self.__nodes[node_name])
+
+    def __init_graph_outputs_node(self):
+        self.__buttom_nodes = []
+
+        for node_name in self.__nodes:
+            if True is self.__nodes[node_name].is_bottom_node:
+                self.__buttom_nodes.append(self.__nodes[node_name])
+
 
     def __node_generator(self, op, op_type, tflite_interpreter):
         if op_type == BuiltinOperator.CONV_2D:
@@ -207,8 +231,14 @@ class Tree:
 
         return layer_obj
 
+    def get_head_nodes(self):
+        return self.__head_nodes
+
+    def get_bottom_nodes(self):
+        return self.__buttom_nodes
+
     def get_nodes(self):
-        return self.__nodes.copy()
+        return self.__nodes
 
 ## Example:
 ####################

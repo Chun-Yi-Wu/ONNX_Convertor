@@ -133,10 +133,13 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
 
 
     # generate tree
-    tree_graph = Tree(model_path=model_path, defused=False)
+    tree_graph = Tree(model_path=model_path, defused=True)
 
     # get tree node in the form of {node_name: op_node_obj}
     tree_dict = tree_graph.get_nodes()
+
+    for root_node in tree_graph.get_head_nodes():
+        root_node.input_nodes_name = [op_name__sub_op_name__table[model_input_name][-1]]
 
     ############################
     # build model node by node #
@@ -144,7 +147,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     for key in tree_dict:
 
         node_name = key
-        prev_node_name = tree_dict[key].input_nodes_name[0] if tree_dict[key].input_nodes_name != [] else model_input_name
+        prev_node_name = tree_dict[key].input_nodes_name[0] #if tree_dict[key].input_nodes_name != [] else model_input_name
 
         if prev_node_name in op_name__sub_op_name__table:
             prev_node_name = op_name__sub_op_name__table[prev_node_name][-1] # last sub node
@@ -174,21 +177,34 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
         if len(nodes) != 0:
             onnx_node_list.extend(nodes)
 
-        # check if it is output node use original node name
-        output_node_info = utils.get_output_node_info_by_name_if_exist(node_name, interpreter)
 
-        if output_node_info is not None:
-            # it's output node
-            out_value_info = None
-            transpose_node = None
-            if add_transpose_for_channel_last_first_issue is True:
-                out_value_info, transpose_node = build_button_transpose_node_for_channel_first_2_channel_last(sub_op_node_list[-1],output_node_info)
-            else:
-                out_value_info = set_end_node(sub_op_node_list[-1],output_node_info)
-            output_tensor_value_info.append(out_value_info)
-            if transpose_node != None: 
-                onnx_node_list.append(transpose_node)
+    
+    output_details = interpreter.get_output_details()
+    tmp_node_list = onnx_node_list.copy()
+    b_nodes_name = [ node.node_name for node in tree_graph.get_bottom_nodes() ]
+    
+    for onnx_node in tmp_node_list:
 
+        # check if it is output node
+        if onnx_node.name not in b_nodes_name:
+            continue
+
+        for output_node_info in output_details:
+
+            if output_node_info['name'] in onnx_node.name:  # name of defused node is slightly different from original
+                output_node_info['name'] = onnx_node.name
+
+                # it's output node
+                out_value_info = None
+                transpose_node = None
+                if add_transpose_for_channel_last_first_issue is True:
+                    out_value_info, transpose_node = build_button_transpose_node_for_channel_first_2_channel_last(onnx_node,output_node_info)
+                else:
+                    out_value_info = set_end_node(onnx_node,output_node_info)
+                output_tensor_value_info.append(out_value_info)
+                if transpose_node != None: 
+                    onnx_node_list.append(transpose_node)
+    
 
 
 
@@ -210,7 +226,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     # add generated time to model meta data
     helper.set_model_props(cnn_model, {'Generated Time': datetime.utcnow().strftime("%m/%d/%Y, %H:%M:%S") + " (UTC+0)"})
 
-    cnn_model = onnx.utils.polish_model(cnn_model)
+    #cnn_model = onnx.utils.polish_model(cnn_model)
 
     # save
     onnx.save(cnn_model, model_save_path)
@@ -243,7 +259,7 @@ if __name__ == '__main__':
 
     print('-----------    start to generate  -----------')
     print('generating...')
-
+    main(model_path, model_save_path, not is_release_mode)
     try:
         main(model_path, model_save_path, not is_release_mode)
     except Exception as e:
