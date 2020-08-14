@@ -40,6 +40,7 @@ class Tree:
 
         self.__parse_graph()
         self.__eliminate_side_input()
+        self.__init_inputs_node_info()
         self.__init_outputs_node_info()
         self.__defused(enable_defuse=defused)
         self.__init_graph_inputs_node()
@@ -89,9 +90,25 @@ class Tree:
                     new_input_nodes_name.append(input_node_name)
             self.__nodes[node_name].input_nodes_name = new_input_nodes_name
 
+    def __init_inputs_node_info(self):
+        if self.__nodes is None:
+            raise ValueError("__nodes not initial")
+
+        # init input_nodes
+        for node_name in self.__nodes:
+            node = self.__nodes[node_name]
+            for input_node_name in node.input_nodes_name:
+                node.input_nodes.append(self.__nodes[input_node_name])
+
     def __init_outputs_node_info(self):
         if self.__nodes is None:
             raise ValueError("__nodes not initial")
+
+        for node_name in self.__nodes:
+            node = self.__nodes[node_name]
+            node.output_nodes_idx.clear()
+            node.output_nodes_name.clear()
+            node.output_nodes.clear()
 
         # init output_nodes_idx
         nodes_idx_dict = {}
@@ -101,7 +118,8 @@ class Tree:
         for idx in nodes_idx_dict:
             node = nodes_idx_dict[idx]
             for input_node_idx in node.input_nodes_idx:
-                nodes_idx_dict[input_node_idx].output_nodes_idx.append(idx)
+                if not(idx in nodes_idx_dict[input_node_idx].output_nodes_idx):
+                    nodes_idx_dict[input_node_idx].output_nodes_idx.append(idx)
 
         for idx in nodes_idx_dict:
             self.__nodes[nodes_idx_dict[idx].node_name].output_nodes_idx = nodes_idx_dict[idx].output_nodes_idx
@@ -112,6 +130,13 @@ class Tree:
             for input_node_name in node.input_nodes_name:
                 if not (node_name in self.__nodes[input_node_name].output_nodes_name):
                     self.__nodes[input_node_name].output_nodes_name.append(node_name)
+
+        # init output_nodes
+        for node_name in self.__nodes:
+            node = self.__nodes[node_name]
+            for input_node in node.input_nodes:
+                if not (node in input_node.output_nodes):
+                    input_node.output_nodes.append(node)
 
     def __defused(self, enable_defuse):
         if not enable_defuse:
@@ -131,28 +156,48 @@ class Tree:
                 input_node_outputs_remove_name = node.output_nodes_name.copy()
                 input_node_outputs_add_name = defused_activation_node.node_name
 
+                input_node_outputs_remove_node = node.output_nodes.copy()
+                input_node_outputs_add_node = defused_activation_node
+
                 # init fused node
                 fused_node_inputs_name = [node.node_name]
                 fused_node_outputs_name = node.output_nodes_name.copy()
 
+                fused_node_inputs_node = [node]
+                fused_node_outputs_node = node.output_nodes.copy()
+
                 # init output node
                 output_node_inputs_remove_node_name = node.node_name
                 output_node_inputs_add_node_name = defused_activation_node.node_name
+
+                output_node_inputs_remove_node = node
+                output_node_inputs_add_node = defused_activation_node
 
                 # modify input node
                 for input_node_output_remove_name in input_node_outputs_remove_name:
                     node.output_nodes_name.remove(input_node_output_remove_name)
                 node.output_nodes_name.append(input_node_outputs_add_name)
 
+                for input_node_output_remove_node in input_node_outputs_remove_node:
+                    node.output_nodes.remove(input_node_output_remove_node)
+                node.output_nodes.append(input_node_outputs_add_node)
+
                 # modify fused node
                 defused_activation_node.input_nodes_name = fused_node_inputs_name
                 defused_activation_node.output_nodes_name = fused_node_outputs_name
+
+                defused_activation_node.input_nodes = fused_node_inputs_node
+                defused_activation_node.output_nodes = fused_node_outputs_node
 
                 # modify output node
                 for output_node_name in fused_node_outputs_name:
                     output_node = self.__nodes[output_node_name]
                     output_node.input_nodes_name.remove(output_node_inputs_remove_node_name)
                     output_node.input_nodes_name.append(output_node_inputs_add_node_name)
+
+                for output_node in fused_node_outputs_node:
+                    output_node.input_nodes.remove(output_node_inputs_remove_node)
+                    output_node.input_nodes.append(output_node_inputs_add_node)
 
                 # defused node is not head node
                 defused_activation_node.is_head_node = False
@@ -176,11 +221,11 @@ class Tree:
                 self.__head_nodes.append(self.__nodes[node_name])
 
     def __init_graph_outputs_node(self):
-        self.__buttom_nodes = []
+        self.__bottom_nodes = []
 
         for node_name in self.__nodes:
             if True is self.__nodes[node_name].is_bottom_node:
-                self.__buttom_nodes.append(self.__nodes[node_name])
+                self.__bottom_nodes.append(self.__nodes[node_name])
 
 
     def __node_generator(self, op, op_type, tflite_interpreter):
@@ -235,7 +280,7 @@ class Tree:
         return self.__head_nodes
 
     def get_bottom_nodes(self):
-        return self.__buttom_nodes
+        return self.__bottom_nodes
 
     def get_nodes(self):
         return self.__nodes
@@ -243,8 +288,17 @@ class Tree:
 ## Example:
 ####################
 # tree_graph = Tree(
-#     model_path='/home/andy_huang/data/tf_detection_model_zoo/coco_trained_models/ssd_mobilenet_v2_coco/ssd_mobilenet_v2_coco_2018_03_29_ssd_mobilenet_v2_coco/ssd_mobilenet_v2_coco_2018_03_29/saved_model_ssd/model.tflite',
-#     defused=False
+#     model_path='/home/andy_huang/data/tf_detection_model_zoo/coco_trained_models/ssd_inception_v2_coco/ssd_inception_v2_coco_2018_01_28/saved_model_ssd/model.tflite',
+#     defused=True
 #     )
-# print(tree_graph.get_nodes())
+# # print(tree_graph.get_nodes())
 # make_graph(tree_graph)
+#
+# node_list = tree_graph.get_head_nodes()
+#
+# for node in node_list:
+#     output_nodes = node.output_nodes
+#     print(node.node_name)
+#     while 0 < output_nodes.__len__():
+#         print(output_nodes[0].node_name)
+#         output_nodes = output_nodes[0].output_nodes

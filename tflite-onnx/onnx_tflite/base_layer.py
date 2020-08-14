@@ -36,6 +36,8 @@ class Layer(metaclass=abc.ABCMeta):
 
     def __init_inputs(self):
         # Only None for Generated Fused Node
+        self.input_nodes = []
+
         if self.op is None:
             self.input_nodes_idx = []
             self.input_nodes_name = []
@@ -57,6 +59,7 @@ class Layer(metaclass=abc.ABCMeta):
     def __init_outputs(self):
         self.output_nodes_idx = []
         self.output_nodes_name = []
+        self.output_nodes = []
 
     def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
         # basic parse
