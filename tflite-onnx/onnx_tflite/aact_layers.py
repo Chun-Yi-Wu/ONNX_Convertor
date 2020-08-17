@@ -50,19 +50,11 @@ class ActivationDefused(Layer, metaclass=abc.ABCMeta):
         Layer.__init__(self, op, op_type, tflite_interpreter)
         self.node_name = '{}_Fused'.format(self.node_name)
 
-    def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        #return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-        return self
-
 
 class ReluDefused(ActivationDefused):
 
     def __init__(self, op, op_type, tflite_interpreter):
         ActivationDefused.__init__(self, op, op_type, tflite_interpreter)
-
-    def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        #return ActivationDefused.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-        return self
 
     def generate(self):
         relu_name = self.node_name
@@ -88,10 +80,6 @@ class Relu6Defused(ActivationDefused):
 
     def __init__(self, op, op_type, tflite_interpreter):
         ActivationDefused.__init__(self, op, op_type, tflite_interpreter)
-
-    def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        #return ActivationDefused.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-        return self
 
     def generate(self):
         clip_name = self.node_name
@@ -122,10 +110,6 @@ class Relu(Layer):
     def __init__(self, op, op_type, tflite_interpreter):
         Layer.__init__(self, op, op_type, tflite_interpreter)
 
-    def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        #return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-        return self
-
     def generate(self):
         relu_node = helper.make_node(
             "Relu",
@@ -137,7 +121,7 @@ class Relu(Layer):
         # original layer output
         node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
         out_shape_info = onnx.helper.make_tensor_value_info(
-            self.onnx_node_name,
+            self.node_name,
             TensorProto.FLOAT,
             utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
         )
@@ -152,10 +136,6 @@ class Relu6(Layer):
 
     def __init__(self, op, op_type, tflite_interpreter):
         Layer.__init__(self, op, op_type, tflite_interpreter)
-
-    def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        #return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-        return self
 
     def generate(self):
         clip_node = onnx.helper.make_node(
@@ -186,10 +166,6 @@ class LOGISTIC(Layer):
     def __init__(self, op, op_type, tflite_interpreter):
         Layer.__init__(self, op, op_type, tflite_interpreter)
 
-    def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        #return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-        return self
-
     def generate(self):
         logistic_name = self.node_name
         logistic_node = helper.make_node(
@@ -208,10 +184,6 @@ class Softmax(Layer):
     def __init__(self, op, op_type, tflite_interpreter):
         Layer.__init__(self, op, op_type, tflite_interpreter)
 
-    def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        #return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-        return self
-
     def generate(self):
         softmax_node_name = self.node_name
         softmax_node = onnx.helper.make_node(
@@ -229,10 +201,6 @@ class PRelu(Layer):
 
     def __init__(self, op, op_type, tflite_interpreter):
         Layer.__init__(self, op, op_type, tflite_interpreter)
-
-    def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        #return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-        return self
 
     def generate(self):
         slope_node_info = self.tflite_interpreter._get_tensor_details(self.op.Inputs(1))

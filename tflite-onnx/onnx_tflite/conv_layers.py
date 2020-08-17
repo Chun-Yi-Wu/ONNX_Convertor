@@ -23,14 +23,6 @@ class Convolution(Layer):
       self.tflite_conv_parser = Conv2DOptions()
       self.tflite_conv_parser.Init(op.BuiltinOptions().Bytes, op.BuiltinOptions().Pos)
 
-  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      #Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-
-      #self.tflite_conv_parser = Conv2DOptions()
-      #self.tflite_conv_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
-
-      return self
-
   def generate(self):
       node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
       node_input_detail = self.tflite_interpreter._get_tensor_details(self.op.Inputs(0))
@@ -103,6 +95,40 @@ class Convolution(Layer):
       self.weight_node_list.append(bias_onnx_node)
       self.node_list.append(conv_onnx_node)
 
+
+      activative_op = self.tflite_conv_parser.FusedActivationFunction()
+      if activative_op == ActivationFunctionType.RELU6:
+          clip_name = 'fused_clip_' + self.node_name
+          clip_node = onnx.helper.make_node('Clip',inputs=[self.node_name],outputs=[clip_name],min=0.0,max=6.0,name=clip_name)
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              clip_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+          )
+
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(clip_node)
+
+      elif activative_op == ActivationFunctionType.RELU:
+          relu_name = 'fused_relu_' + self.node_name
+          relu_node = onnx.helper.make_node("Relu",name=relu_name, inputs=[self.node_name], outputs=[relu_name])
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              relu_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((node_output_detail['shape'].tolist()))
+          )
+
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(relu_node)
+
+      # change output node's input_name
+      for o_n in self.output_nodes:
+          for idx, o_n_i_n in enumerate(o_n.input_nodes_name):
+              if o_n_i_n == self.node_name:
+                  o_n.input_nodes_name[idx] = self.node_list[-1].name
+
       return self.node_list, self.value_infos, self.weight_node_list
 
   def defuse_activation_function(self):
@@ -119,14 +145,6 @@ class DepthwiseConvolution(Layer):
 
       self.tflite_conv_parser = DepthwiseConv2DOptions()
       self.tflite_conv_parser.Init(self.op.BuiltinOptions().Bytes, self.op.BuiltinOptions().Pos)
-
-  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      #Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-
-      #self.tflite_conv_parser = DepthwiseConv2DOptions()
-      #self.tflite_conv_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
-
-      return self
 
   def generate(self):
       node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
@@ -205,6 +223,39 @@ class DepthwiseConvolution(Layer):
       self.weight_node_list.append(bias_onnx_node)
       self.node_list.append(conv_onnx_node)
 
+      activative_op = self.tflite_conv_parser.FusedActivationFunction()
+      if activative_op == ActivationFunctionType.RELU6:
+          clip_name = 'fused_clip_' + self.node_name
+          clip_node = onnx.helper.make_node('Clip',inputs=[self.node_name],outputs=[clip_name],min=0.0,max=6.0,name=clip_name)
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              clip_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map(node_output_detail['shape'].tolist())
+          )
+
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(clip_node)
+
+      elif activative_op == ActivationFunctionType.RELU:
+          relu_name = 'fused_relu_' + self.node_name
+          relu_node = onnx.helper.make_node("Relu",name=relu_name, inputs=[self.node_name], outputs=[relu_name])
+          out_shape_info = onnx.helper.make_tensor_value_info(
+              relu_name,
+              TensorProto.FLOAT,
+              utils.tflite2onnx_shape_map((node_output_detail['shape'].tolist()))
+          )
+
+          # update tables
+          self.value_infos.append(out_shape_info)
+          self.node_list.append(relu_node)
+
+      # change output node's input_name
+      for o_n in self.output_nodes:
+          for idx, o_n_i_n in enumerate(o_n.input_nodes_name):
+              if o_n_i_n == self.node_name:
+                  o_n.input_nodes_name[idx] = self.node_list[-1].name
+
       return self.node_list, self.value_infos, self.weight_node_list
 
   def defuse_activation_function(self):
@@ -218,10 +269,6 @@ class ResizeNearestNeighbor(Layer):
 
     def __init__(self, op, op_type, tflite_interpreter):
         Layer.__init__(self, op, op_type, tflite_interpreter)
-
-    def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        #return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-        return self
 
     def generate(self):
         if utils.ONNX_VERSION_1_4_1 == onnx.__version__:
@@ -295,9 +342,6 @@ class ResizeBilinear(Layer):
 
     def __init__(self, op, op_type, tflite_interpreter):
         Layer.__init__(self, op, op_type, tflite_interpreter)
-
-    def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-        return Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
 
     def generate(self):
         if utils.ONNX_VERSION_1_4_1 == onnx.__version__:
@@ -373,15 +417,7 @@ class TransposeConvolution(Layer):
       Layer.__init__(self, op, op_type, tflite_interpreter)
 
       self.tflite_tconv_parser = TransposeConvOptions()
-      self.tflite_tconv_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
-
-  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      #Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-
-      #self.tflite_tconv_parser = TransposeConvOptions()
-      #self.tflite_tconv_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
-
-      return self
+      self.tflite_tconv_parser.Init(op.BuiltinOptions().Bytes, op.BuiltinOptions().Pos)
 
   def generate(self):
 

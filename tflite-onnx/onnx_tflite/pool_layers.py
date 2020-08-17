@@ -20,14 +20,6 @@ class MaxPooling2D(Layer):
       self.tflite_maxpool_parser = Pool2DOptions()
       self.tflite_maxpool_parser.Init(op.BuiltinOptions().Bytes, op.BuiltinOptions().Pos)
 
-  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      #Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-
-      #self.tflite_maxpool_parser = Pool2DOptions()
-      #self.tflite_maxpool_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
-
-      return self
-
   def generate(self):
 
       node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
@@ -64,6 +56,8 @@ class MaxPooling2D(Layer):
       self.value_infos.append(out_shape_info)
       self.node_list.append(max_pool_node)
 
+      return self.node_list, self.value_infos, self.weight_node_list
+
   def defuse_activation_function(self):
       return defused_activation_node_generator(
           activation_function_type=self.tflite_maxpool_parser.FusedActivationFunction(),
@@ -77,14 +71,6 @@ class AveragePooling2D(Layer):
 
       self.tflite_avgpool_parser = Pool2DOptions()
       self.tflite_avgpool_parser.Init(self.op.BuiltinOptions().Bytes, self.op.BuiltinOptions().Pos)
-
-  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      #Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-
-      #self.tflite_avgpool_parser = Pool2DOptions()
-      #self.tflite_avgpool_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
-
-      return self
 
   def generate(self):
 
@@ -138,14 +124,6 @@ class Mean(Layer):
       self.tflite_mean_parser = ReducerOptions()
       self.tflite_mean_parser.Init(self.op.BuiltinOptions().Bytes, self.op.BuiltinOptions().Pos)
 
-  def init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter):
-      #Layer.init_generate(self, previous_onnx_node_names, op_type, op_info, tflite_interpreter)
-
-      #self.tflite_mean_parser = ReducerOptions()
-      #self.tflite_mean_parser.Init(op_info.BuiltinOptions().Bytes, op_info.BuiltinOptions().Pos)
-
-      return self
-
   def generate(self):
       node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
 
@@ -185,11 +163,18 @@ class Mean(Layer):
           # update tables
           self.value_infos.append(out_shape_info)
           self.node_list.append(squeeze_node)
+
+          # change output node's input_name
+          for o_n in self.output_nodes:
+             for idx, o_n_i_n in enumerate(o_n.input_nodes_name):
+                 if o_n_i_n == self.node_name:
+                    o_n.input_nodes_name[idx] = squeeze_node_name
       
-      
       ##################  add squeeze  ###############
       ##################  add squeeze  ###############
       ##################  add squeeze  ###############
+
+
 
       return self.node_list, self.value_infos, self.weight_node_list
 

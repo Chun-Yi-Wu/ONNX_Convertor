@@ -100,9 +100,6 @@ def build_head_transpose_node_for_channel_last_2_channel_first(input_name):
 
 def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue = True):
 
-    # some nodes are merged as one node, we need a table to store this information
-    op_name__sub_op_name__table = {}
-
     onnx_weight_node_list = []
     output_tensor_value_info = []
     onnx_node_list = []
@@ -118,6 +115,12 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     model_input_shape = input_details[0]['shape'].tolist()
     input_tensor_value_info = None
 
+    # generate tree
+    tree_graph = Tree(model_path=model_path, defused=False)
+
+    # get tree node in the form of {node_name: op_node_obj}
+    tree_dict = tree_graph.get_nodes()
+
     if add_transpose_for_channel_last_first_issue is True:
         input_tensor_value_info = helper.make_tensor_value_info(model_input_name, TensorProto.FLOAT, model_input_shape)
         # transpose for channel last to channel first
@@ -125,50 +128,25 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
 
         # update tables
         onnx_node_list = [transpose_node]
-        op_name__sub_op_name__table[model_input_name] = [model_input_name, transpose_node.name]   
+
+        for root_node in tree_graph.get_head_nodes():
+            root_node.input_nodes_name = [transpose_node.name]
+
     else: 
         onnx_node_list = []
         input_tensor_value_info = helper.make_tensor_value_info(model_input_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(model_input_shape))
-        op_name__sub_op_name__table[model_input_name] = [model_input_name, input_tensor_value_info.name]  
+
+        for root_node in tree_graph.get_head_nodes():
+            root_node.input_nodes_name = [model_input_name]
 
 
-    # generate tree
-    tree_graph = Tree(model_path=model_path, defused=True)
-
-    # get tree node in the form of {node_name: op_node_obj}
-    tree_dict = tree_graph.get_nodes()
-
-    for root_node in tree_graph.get_head_nodes():
-        root_node.input_nodes_name = [op_name__sub_op_name__table[model_input_name][-1]]
 
     ############################
     # build model node by node #
     ############################
     for key in tree_dict:
 
-        node_name = key
-        prev_node_name = tree_dict[key].input_nodes_name[0] #if tree_dict[key].input_nodes_name != [] else model_input_name
-
-        if prev_node_name in op_name__sub_op_name__table:
-            prev_node_name = op_name__sub_op_name__table[prev_node_name][-1] # last sub node
-
-        op_type = tree_dict[key].op_type
-        op = tree_dict[key].op
-
-        if op_type in [BuiltinOperator.ADD, BuiltinOperator.MUL, BuiltinOperator.CONCATENATION]:
-            nodes, val, weight = tree_dict[key].init_generate([prev_node_name], op_type, op, interpreter).generate(op_name__sub_op_name__table)
-        else:
-            nodes, val, weight = tree_dict[key].init_generate([prev_node_name], op_type, op, interpreter).generate()
-
-
-        sub_op_node_list = []
-        for node in nodes:
-            # weight and bias node is onnx type Constant
-            if node.op_type != 'Constant':
-                sub_op_node_list.append(node)
-
-        # update tables        
-        op_name__sub_op_name__table[node_name] = [sub_op_node.name for sub_op_node in sub_op_node_list]
+        nodes, val, weight = tree_dict[key].generate()
 
         if len(val) != 0:
             inner_node_shape_value_info.extend(val)
@@ -181,7 +159,9 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     
     output_details = interpreter.get_output_details()
     tmp_node_list = onnx_node_list.copy()
-    b_nodes_name = [ node.node_name for node in tree_graph.get_bottom_nodes() ]
+
+    # sometimes, there are sub-node in one tree node, we need to find the last one
+    b_nodes_name = [ node.node_list[-1].name for node in tree_graph.get_bottom_nodes() ]
     
     for onnx_node in tmp_node_list:
 
@@ -226,7 +206,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     # add generated time to model meta data
     helper.set_model_props(cnn_model, {'Generated Time': datetime.utcnow().strftime("%m/%d/%Y, %H:%M:%S") + " (UTC+0)"})
 
-    #cnn_model = onnx.utils.polish_model(cnn_model)
+    cnn_model = onnx.utils.polish_model(cnn_model)
 
     # save
     onnx.save(cnn_model, model_save_path)
@@ -259,7 +239,7 @@ if __name__ == '__main__':
 
     print('-----------    start to generate  -----------')
     print('generating...')
-    main(model_path, model_save_path, not is_release_mode)
+
     try:
         main(model_path, model_save_path, not is_release_mode)
     except Exception as e:
