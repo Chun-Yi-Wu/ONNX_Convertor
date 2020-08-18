@@ -64,12 +64,14 @@ class Tree:
 
     def __parse_graph(self):
         self.__nodes = dict()
+        self.__sequential_nodes_key = []
 
         for idx, op in enumerate(self.__tflite_ops):
             node = self.__node_generator(op=op,
                                          op_type=self.__tflite_op_types[idx],
                                          tflite_interpreter=self.__interpreter)
             self.__nodes[node.node_name] = node
+            self.__sequential_nodes_key.append(node.node_name)
 
     def __eliminate_side_input(self):
         # eliminate side input idx
@@ -213,6 +215,10 @@ class Tree:
         for defused_activation_node in add_defused_activation_node_list:
             self.__nodes[defused_activation_node.node_name] = defused_activation_node
 
+            # update __sequential_nodes_key
+            insert_index = self.__sequential_nodes_key.index(defused_activation_node.input_nodes[0].node_name) + 1
+            self.__sequential_nodes_key.insert(insert_index, defused_activation_node.node_name)
+
     def __init_graph_inputs_node(self):
         self.__head_nodes = []
 
@@ -281,6 +287,9 @@ class Tree:
 
     def get_bottom_nodes(self):
         return self.__bottom_nodes
+
+    def get_sequential_nodes_key(self):
+        return self.__sequential_nodes_key.copy()
 
     def get_nodes(self):
         return self.__nodes

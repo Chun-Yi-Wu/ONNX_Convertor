@@ -116,7 +116,10 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     input_tensor_value_info = None
 
     # generate tree
-    tree_graph = Tree(model_path=model_path, defused=False)
+    tree_graph = Tree(model_path=model_path, defused=True)
+
+    # get sequential node name
+    sequential_keys = tree_graph.get_sequential_nodes_key()
 
     # get tree node in the form of {node_name: op_node_obj}
     tree_dict = tree_graph.get_nodes()
@@ -144,7 +147,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     ############################
     # build model node by node #
     ############################
-    for key in tree_dict:
+    for key in sequential_keys:
 
         nodes, val, weight = tree_dict[key].generate()
 
