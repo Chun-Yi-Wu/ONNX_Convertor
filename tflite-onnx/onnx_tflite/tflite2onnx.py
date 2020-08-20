@@ -42,23 +42,23 @@ def get_op_info(model_path):
 
     return ops, op_types
 
-def set_end_node(onnx_end_node, tflite_out_info):
+def set_end_node(onnx_end_node, onnx_end_node_shape):
 
     out_value_info_name = "out_" + onnx_end_node.name
-    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(tflite_out_info['shape'].tolist()))
+    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(onnx_end_node_shape))
 
     # change output
     onnx_end_node.output[:] = [out_value_info_name]
 
     return out_value_info
 
-def build_button_transpose_node_for_channel_first_2_channel_last(onnx_end_node, tflite_out_info):
+def build_button_transpose_node_for_channel_first_2_channel_last(onnx_end_node, onnx_end_node_shape):
     transpose_node = None
 
     out_value_info_name = "out_" + onnx_end_node.name
-    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, tflite_out_info['shape'].tolist())
+    out_value_info = helper.make_tensor_value_info( out_value_info_name, TensorProto.FLOAT, onnx_end_node_shape)
 
-    if len(tflite_out_info['shape'].tolist()) == 4:
+    if len(onnx_end_node_shape) == 4:
         # add transpose if it is 4 dimension output
 
         transpose_node_name = 'transpose_node_output_' + onnx_end_node.name
@@ -69,7 +69,7 @@ def build_button_transpose_node_for_channel_first_2_channel_last(onnx_end_node, 
             perm=[0, 2, 3, 1],
             name=transpose_node_name
         )
-    elif len(tflite_out_info['shape'].tolist()) == 3:
+    elif len(onnx_end_node_shape) == 3:
         # add transpose if it is 3 dimension output
 
         transpose_node_name = 'transpose_node_output_' + onnx_end_node.name
@@ -116,7 +116,9 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     input_tensor_value_info = None
 
     # generate tree
+    #tree_graph = Tree(model_path=model_path,head_node_name='siamese_neural_congas_1/feature_extraction/Conv_1/Relu6',bottom_node_name='siamese_neural_congas_1/Mixed_6a/concat', defused=True)
     tree_graph = Tree(model_path=model_path, defused=True)
+
 
     # get sequential node name
     sequential_keys = tree_graph.get_sequential_nodes_key()
@@ -159,36 +161,23 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
             onnx_node_list.extend(nodes)
 
 
-    
-    output_details = interpreter.get_output_details()
-    tmp_node_list = onnx_node_list.copy()
 
     # sometimes, there are sub-node in one tree node, we need to find the last one
-    b_nodes_name = [ node.node_list[-1].name for node in tree_graph.get_bottom_nodes() ]
-    
-    for onnx_node in tmp_node_list:
+    b_nodes = [ node for node in tree_graph.get_bottom_nodes() ]
 
-        # check if it is output node
-        if onnx_node.name not in b_nodes_name:
-            continue
 
-        for output_node_info in output_details:
+    for b_node in b_nodes:
 
-            if output_node_info['name'] in onnx_node.name:  # name of defused node is slightly different from original
-                output_node_info['name'] = onnx_node.name
-
-                # it's output node
-                out_value_info = None
-                transpose_node = None
-                if add_transpose_for_channel_last_first_issue is True:
-                    out_value_info, transpose_node = build_button_transpose_node_for_channel_first_2_channel_last(onnx_node,output_node_info)
-                else:
-                    out_value_info = set_end_node(onnx_node,output_node_info)
-                output_tensor_value_info.append(out_value_info)
-                if transpose_node != None: 
-                    onnx_node_list.append(transpose_node)
-    
-
+        # it's output node
+        out_value_info = None
+        transpose_node = None
+        if add_transpose_for_channel_last_first_issue is True:
+            out_value_info, transpose_node = build_button_transpose_node_for_channel_first_2_channel_last( b_node.node_list[-1], b_node.node_output_shape.tolist() )
+        else:
+            out_value_info = set_end_node(b_node.node_list[-1], b_node.node_output_shape)
+        output_tensor_value_info.append(out_value_info)
+        if transpose_node != None: 
+            onnx_node_list.append(transpose_node)    
 
 
     input_init = [input_tensor_value_info]

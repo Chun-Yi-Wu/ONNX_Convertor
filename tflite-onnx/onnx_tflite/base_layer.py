@@ -30,9 +30,11 @@ class Layer(metaclass=abc.ABCMeta):
             return
 
         node_output_detail = self.tflite_interpreter._get_tensor_details(self.op.Outputs(0))
+        
 
         self.node_idx = node_output_detail['index']
         self.node_name = node_output_detail['name']
+        self.node_output_shape = node_output_detail['shape']
 
     def __init_inputs(self):
         # Only None for Generated Fused Node

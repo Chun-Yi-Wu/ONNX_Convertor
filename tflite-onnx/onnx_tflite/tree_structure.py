@@ -9,6 +9,8 @@ from pool_layers import MaxPooling2D, AveragePooling2D, Mean
 from tflite.BuiltinOperator import BuiltinOperator
 from tflite.Model import Model
 
+import networkx as nx
+
 # For Testing and Check Graph Visualization
 def make_graph(tree):
     import networkx as nx
@@ -20,17 +22,21 @@ def make_graph(tree):
 
     for node_name in nodes:
         graph.add_node(node_name)
-
+        
         for output_node_name in nodes[node_name].output_nodes_name:
             graph.add_edge(node_name, output_node_name)
 
-    pos = graphviz_layout(graph, prog='dot')
-    nx.draw(graph, with_labels=True, pos=pos, font_weight='bold')
-    plt.show()
+    s_g = nx.all_simple_paths(graph,source='siamese_neural_congas_1/feature_extraction/Conv_1/Relu6', target='siamese_neural_congas_1/Mixed_6a/concat')
+    #print('g len' + str(len(s_g)))
+    for path in s_g:
+        print(path)
+    #pos = graphviz_layout(graph, prog='dot')
+    #nx.draw(graph, with_labels=True, pos=pos, font_weight='bold')
+    #plt.show()
 
 # Core Tree Structure Class
 class Tree:
-    def __init__(self, model_path, defused=True):
+    def __init__(self, model_path, head_node_name=None, bottom_node_name=None, defused=True):
         # parse operator information through flatc python module
         self.__init_op_info(model_path)
 
@@ -42,9 +48,54 @@ class Tree:
         self.__eliminate_side_input()
         self.__init_inputs_node_info()
         self.__init_outputs_node_info()
+        self.__generate_subtree(head_node_name, bottom_node_name)
         self.__defused(enable_defuse=defused)
         self.__init_graph_inputs_node()
         self.__init_graph_outputs_node()
+
+    def __generate_subtree(self, head_node_name, bottom_node_name):
+        if (head_node_name is None) or (bottom_node_name is None):
+            return
+        graph = nx.DiGraph(directed=True)
+        nodes = self.get_nodes()
+
+        for node_name in nodes:
+            graph.add_node(node_name)
+            
+            for output_node_name in nodes[node_name].output_nodes_name:
+                graph.add_edge(node_name, output_node_name)
+
+        all_possible_paths = nx.all_simple_paths(graph,source=head_node_name, target=bottom_node_name)
+
+        # merge all path nodes
+        node_pool = set()
+        for path in all_possible_paths:
+            for node_name in path:
+                node_pool.add(node_name)
+        
+        # generate subtree
+        sub_tree = dict()
+        for node_name in node_pool:
+            sub_tree[node_name] = self.__nodes[node_name]
+            for o_n in sub_tree[node_name].output_nodes_name: 
+                if o_n not in node_pool: 
+                    sub_tree[node_name].output_nodes_name.remove(o_n)
+            for i_n in sub_tree[node_name].input_nodes_name: 
+                if i_n not in node_pool: 
+                    sub_tree[node_name].input_nodes_name.remove(i_n)
+
+        self.__nodes = sub_tree
+        self.__nodes[head_node_name].is_head_node = True
+        self.__nodes[bottom_node_name].is_bottom_node = True
+
+        # remove unused node in sequential key
+        new_sequential_nodes_key = []
+        for s_o_n in self.__sequential_nodes_key:
+            if s_o_n in node_pool:
+                new_sequential_nodes_key.append(s_o_n)
+        self.__sequential_nodes_key = new_sequential_nodes_key
+
+        
 
     def __init_op_info(self, model_path):
         self.__tflite_ops = []
