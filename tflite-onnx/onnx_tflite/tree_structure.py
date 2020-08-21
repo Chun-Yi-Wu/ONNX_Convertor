@@ -9,12 +9,12 @@ from pool_layers import MaxPooling2D, AveragePooling2D, Mean
 from tflite.BuiltinOperator import BuiltinOperator
 from tflite.Model import Model
 
-import networkx as nx
+from igraph import Graph
 
 # For Testing and Check Graph Visualization
-def make_graph(tree):
+def display_graph(tree):
     import networkx as nx
-    from networkx.drawing.nx_agraph import write_dot, graphviz_layout
+    from networkx.drawing.nx_agraph import graphviz_layout
     import matplotlib.pyplot as plt
 
     graph = nx.DiGraph(directed=True)
@@ -22,21 +22,17 @@ def make_graph(tree):
 
     for node_name in nodes:
         graph.add_node(node_name)
-        
+
         for output_node_name in nodes[node_name].output_nodes_name:
             graph.add_edge(node_name, output_node_name)
 
-    s_g = nx.all_simple_paths(graph,source='siamese_neural_congas_1/feature_extraction/Conv_1/Relu6', target='siamese_neural_congas_1/Mixed_6a/concat')
-    #print('g len' + str(len(s_g)))
-    for path in s_g:
-        print(path)
-    #pos = graphviz_layout(graph, prog='dot')
-    #nx.draw(graph, with_labels=True, pos=pos, font_weight='bold')
-    #plt.show()
+    pos = graphviz_layout(graph, prog='dot')
+    nx.draw(graph, with_labels=True, pos=pos, font_weight='bold')
+    plt.show()
 
 # Core Tree Structure Class
 class Tree:
-    def __init__(self, model_path, head_node_name=None, bottom_node_name=None, defused=True):
+    def __init__(self, model_path, head_node_name: str = None, bottom_nodes_name: list = None, defused=True):
         # parse operator information through flatc python module
         self.__init_op_info(model_path)
 
@@ -48,54 +44,10 @@ class Tree:
         self.__eliminate_side_input()
         self.__init_inputs_node_info()
         self.__init_outputs_node_info()
-        self.__generate_subtree(head_node_name, bottom_node_name)
+        self.__generate_subtree(head_nodes_name=[head_node_name], bottom_nodes_name=bottom_nodes_name)
         self.__defused(enable_defuse=defused)
         self.__init_graph_inputs_node()
         self.__init_graph_outputs_node()
-
-    def __generate_subtree(self, head_node_name, bottom_node_name):
-        if (head_node_name is None) or (bottom_node_name is None):
-            return
-        graph = nx.DiGraph(directed=True)
-        nodes = self.get_nodes()
-
-        for node_name in nodes:
-            graph.add_node(node_name)
-            
-            for output_node_name in nodes[node_name].output_nodes_name:
-                graph.add_edge(node_name, output_node_name)
-
-        all_possible_paths = nx.all_simple_paths(graph,source=head_node_name, target=bottom_node_name)
-
-        # merge all path nodes
-        node_pool = set()
-        for path in all_possible_paths:
-            for node_name in path:
-                node_pool.add(node_name)
-        
-        # generate subtree
-        sub_tree = dict()
-        for node_name in node_pool:
-            sub_tree[node_name] = self.__nodes[node_name]
-            for o_n in sub_tree[node_name].output_nodes_name: 
-                if o_n not in node_pool: 
-                    sub_tree[node_name].output_nodes_name.remove(o_n)
-            for i_n in sub_tree[node_name].input_nodes_name: 
-                if i_n not in node_pool: 
-                    sub_tree[node_name].input_nodes_name.remove(i_n)
-
-        self.__nodes = sub_tree
-        self.__nodes[head_node_name].is_head_node = True
-        self.__nodes[bottom_node_name].is_bottom_node = True
-
-        # remove unused node in sequential key
-        new_sequential_nodes_key = []
-        for s_o_n in self.__sequential_nodes_key:
-            if s_o_n in node_pool:
-                new_sequential_nodes_key.append(s_o_n)
-        self.__sequential_nodes_key = new_sequential_nodes_key
-
-        
 
     def __init_op_info(self, model_path):
         self.__tflite_ops = []
@@ -171,7 +123,7 @@ class Tree:
         for idx in nodes_idx_dict:
             node = nodes_idx_dict[idx]
             for input_node_idx in node.input_nodes_idx:
-                if not(idx in nodes_idx_dict[input_node_idx].output_nodes_idx):
+                if not (idx in nodes_idx_dict[input_node_idx].output_nodes_idx):
                     nodes_idx_dict[input_node_idx].output_nodes_idx.append(idx)
 
         for idx in nodes_idx_dict:
@@ -284,7 +236,6 @@ class Tree:
             if True is self.__nodes[node_name].is_bottom_node:
                 self.__bottom_nodes.append(self.__nodes[node_name])
 
-
     def __node_generator(self, op, op_type, tflite_interpreter):
         if op_type == BuiltinOperator.CONV_2D:
             layer_obj = Convolution(op, op_type, tflite_interpreter)
@@ -333,6 +284,99 @@ class Tree:
 
         return layer_obj
 
+    def __get_sub_graph_nodes_name(self, source_nodes, target_nodes):
+
+        nodes = self.get_nodes()
+        node_id_dict = {}
+        node_list = []
+
+        source_bfs_set = None
+        target_bfs_set = None
+
+        for idx, node_name in enumerate(nodes):
+            node_id_dict[node_name] = idx
+            node_list.append(node_name)
+
+        # init graph
+        edges = []
+        for node_name in nodes:
+            for output_node_name in nodes[node_name].output_nodes_name:
+                edges.append((node_id_dict[node_name], node_id_dict[output_node_name]))
+
+        graph = Graph(vertex_attrs={"label": node_id_dict.keys()}, edges=edges, directed=True)
+
+        # do source bfs and union
+        for source_node in source_nodes:
+            bfs_set = set(graph.subcomponent(node_id_dict[source_node], mode='out'))
+
+            if source_bfs_set is None:
+                source_bfs_set = bfs_set
+            else:
+                source_bfs_set = source_bfs_set.union(bfs_set)
+
+        # do target bfs and union
+        for target_node in target_nodes:
+            bfs_set = set(graph.subcomponent(node_id_dict[target_node], mode='in'))
+
+            if target_bfs_set is None:
+                target_bfs_set = bfs_set
+            else:
+                target_bfs_set = target_bfs_set.union(bfs_set)
+
+        sub_graph_nodes_set = source_bfs_set.intersection(target_bfs_set)
+
+        sub_graph_nodes = [node_list[idx] for idx in sub_graph_nodes_set]
+
+        return sub_graph_nodes
+
+    def __generate_subtree(self, head_nodes_name: list = None, bottom_nodes_name: list =None):
+        if (head_nodes_name is None) or (bottom_nodes_name is None):
+            return
+
+        for node_name in (head_nodes_name + bottom_nodes_name):
+            if not self.__check_node_in_tree(node_name):
+                raise ValueError('Sub-Graph Error: Node {} not exist in tflite model'.format(node_name))
+
+        # find sub-graph nodes
+        sub_graph_nodes_name = self.__get_sub_graph_nodes_name(source_nodes=head_nodes_name, target_nodes=bottom_nodes_name)
+
+        # generate subtree
+        sub_tree = dict()
+        for node_name in sub_graph_nodes_name:
+            sub_tree[node_name] = self.__nodes[node_name]
+            output_nodes_name = sub_tree[node_name].output_nodes_name.copy()
+            input_nodes_name = sub_tree[node_name].input_nodes_name.copy()
+
+            # update output/input nodes information
+            for o_n in output_nodes_name:
+                if o_n not in sub_graph_nodes_name:
+                    sub_tree[node_name].output_nodes_idx.remove(self.__nodes[o_n].node_idx)
+                    sub_tree[node_name].output_nodes.remove(self.__nodes[o_n])
+                    sub_tree[node_name].output_nodes_name.remove(o_n)
+            for i_n in input_nodes_name:
+                if i_n not in sub_graph_nodes_name:
+                    sub_tree[node_name].input_nodes_idx.remove(self.__nodes[i_n].node_idx)
+                    sub_tree[node_name].input_nodes.remove(self.__nodes[i_n])
+                    sub_tree[node_name].input_nodes_name.remove(i_n)
+
+        self.__nodes = sub_tree
+
+        for head_node_name in head_nodes_name:
+            self.__nodes[head_node_name].is_head_node = True
+
+        for bottom_node_name in bottom_nodes_name:
+            self.__nodes[bottom_node_name].is_bottom_node = True
+
+        # remove unused node in sequential key
+        new_sequential_nodes_key = []
+        for s_o_n in self.__sequential_nodes_key:
+            if s_o_n in sub_graph_nodes_name:
+                new_sequential_nodes_key.append(s_o_n)
+        self.__sequential_nodes_key = new_sequential_nodes_key
+
+    def __check_node_in_tree(self, node_name):
+        return node_name in self.__nodes.keys()
+
     def get_head_nodes(self):
         return self.__head_nodes
 
@@ -345,15 +389,19 @@ class Tree:
     def get_nodes(self):
         return self.__nodes
 
+
 ## Example:
 ####################
 # tree_graph = Tree(
 #     model_path='/home/andy_huang/data/tf_detection_model_zoo/coco_trained_models/ssd_inception_v2_coco/ssd_inception_v2_coco_2018_01_28/saved_model_ssd/model.tflite',
+#     head_node_name='FeatureExtractor/InceptionV2/InceptionV2/Mixed_3b/Branch_1/Conv2d_0a_1x1/Relu6',
+#     bottom_nodes_name=['FeatureExtractor/InceptionV2/InceptionV2/Mixed_3c/Branch_1/Conv2d_0a_1x1/Relu6', 'FeatureExtractor/InceptionV2/InceptionV2/Mixed_3c/Branch_1/Conv2d_0b_3x3/Relu6'],
 #     defused=True
-#     )
-# # print(tree_graph.get_nodes())
-# make_graph(tree_graph)
-#
+# )
+# print(tree_graph.get_nodes())
+
+# display_graph(tree_graph)
+
 # node_list = tree_graph.get_head_nodes()
 #
 # for node in node_list:

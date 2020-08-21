@@ -3,21 +3,13 @@ import onnx.utils
 from onnx import helper
 from onnx import AttributeProto, TensorProto
 
-from conv_layers import Convolution,DepthwiseConvolution,ResizeNearestNeighbor,ResizeBilinear,TransposeConvolution
-from aact_layers import Relu,Relu6,Softmax,LOGISTIC,PRelu
-from core_layers import Dense,Reshape,Pad,Squeeze,L2Normalization
-from merg_layers import Add,Mul,Concatenation
-from pool_layers import MaxPooling2D,AveragePooling2D,Mean
 import utils
 
 import os
 from datetime import datetime
 import argparse
-import json
 import tensorflow as tf
 
-import tflite
-from tflite.BuiltinOperator import BuiltinOperator
 from tflite.Model import Model
 
 from tree_structure import Tree
