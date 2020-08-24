@@ -2,7 +2,7 @@ import tensorflow as tf
 
 from conv_layers import Convolution, DepthwiseConvolution, ResizeNearestNeighbor, ResizeBilinear, TransposeConvolution
 from aact_layers import Relu, Relu6, Softmax, LOGISTIC, PRelu
-from core_layers import Dense, Reshape, Pad, Squeeze, L2Normalization
+from core_layers import Dense, Reshape, Pad, Squeeze, L2Normalization, NullLayer
 from merg_layers import Add, Mul, Concatenation
 from pool_layers import MaxPooling2D, AveragePooling2D, Mean
 
@@ -44,7 +44,11 @@ class Tree:
         self.__eliminate_side_input()
         self.__init_inputs_node_info()
         self.__init_outputs_node_info()
-        self.__generate_subtree(head_nodes_name=[head_node_name], bottom_nodes_name=bottom_nodes_name)
+
+        # cut tree if user assign target nodes
+        if head_node_name != None and bottom_nodes_name != None:
+            self.__generate_subtree(head_nodes_name=[head_node_name], bottom_nodes_name=bottom_nodes_name)
+
         self.__defused(enable_defuse=defused)
         self.__init_graph_inputs_node()
         self.__init_graph_outputs_node()
@@ -279,6 +283,8 @@ class Tree:
             layer_obj = L2Normalization(op, op_type, tflite_interpreter)
         elif op_type == BuiltinOperator.TRANSPOSE_CONV:
             layer_obj = TransposeConvolution(op, op_type, tflite_interpreter)
+        elif op_type == BuiltinOperator.CUSTOM:
+            layer_obj = NullLayer(op, op_type, tflite_interpreter)
         else:
             raise ValueError(op_type)
 
