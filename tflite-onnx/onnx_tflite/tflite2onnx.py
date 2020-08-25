@@ -166,7 +166,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
         if add_transpose_for_channel_last_first_issue is True:
             out_value_info, transpose_node = build_button_transpose_node_for_channel_first_2_channel_last( b_node.node_list[-1], b_node.node_output_shape.tolist() )
         else:
-            out_value_info = set_end_node(b_node.node_list[-1], b_node.node_output_shape)
+            out_value_info = set_end_node(b_node.node_list[-1], b_node.node_output_shape.tolist())
         output_tensor_value_info.append(out_value_info)
         if transpose_node != None: 
             onnx_node_list.append(transpose_node)    
@@ -225,9 +225,11 @@ if __name__ == '__main__':
 
     print('-----------    start to generate  -----------')
     print('generating...')
-
+    head_node_name = None if args.head_node is None else args.head_node
+    bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else None
+    main(model_path, model_save_path , not is_release_mode, head_node_name=head_node_name , bottom_nodes_name=bottom_nodes_name)
     try:
-        head_node_name = args.head_node
+        head_node_name = None if args.head_node is None else args.head_node
         bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else None
         main(model_path, model_save_path , not is_release_mode, head_node_name=head_node_name , bottom_nodes_name=bottom_nodes_name)
     except Exception as e:
