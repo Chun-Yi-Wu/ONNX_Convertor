@@ -225,9 +225,7 @@ if __name__ == '__main__':
 
     print('-----------    start to generate  -----------')
     print('generating...')
-    head_node_name = None if args.head_node is None else args.head_node
-    bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else None
-    main(model_path, model_save_path , not is_release_mode, head_node_name=head_node_name , bottom_nodes_name=bottom_nodes_name)
+
     try:
         head_node_name = None if args.head_node is None else args.head_node
         bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else None
