@@ -53,7 +53,7 @@ def build_button_transpose_node_for_channel_first_2_channel_last(onnx_end_node, 
     if len(onnx_end_node_shape) == 4:
         # add transpose if it is 4 dimension output
 
-        transpose_node_name = 'transpose_node_output_' + onnx_end_node.name
+        transpose_node_name = 'transpose_node_bottom_' + onnx_end_node.name
         transpose_node = onnx.helper.make_node(
             'Transpose',
             inputs=[onnx_end_node.name],
@@ -64,7 +64,7 @@ def build_button_transpose_node_for_channel_first_2_channel_last(onnx_end_node, 
     elif len(onnx_end_node_shape) == 3:
         # add transpose if it is 3 dimension output
 
-        transpose_node_name = 'transpose_node_output_' + onnx_end_node.name
+        transpose_node_name = 'transpose_node_bottom_' + onnx_end_node.name
         transpose_node = onnx.helper.make_node(
             'Transpose',
             inputs=[onnx_end_node.name],
@@ -78,14 +78,14 @@ def build_button_transpose_node_for_channel_first_2_channel_last(onnx_end_node, 
 
     return out_value_info, transpose_node
 
-def build_head_transpose_node_for_channel_last_2_channel_first(input_name):
-    transpose_node_name = 'transpose_node_input_' + input_name
+def build_head_transpose_node_for_channel_last_2_channel_first(input_name, transpose_node_name):
+    this_node_name = 'transpose_node_head_' + transpose_node_name
     transpose_node = onnx.helper.make_node(
         'Transpose',
         inputs=[input_name],
-        outputs=[transpose_node_name],
+        outputs=[this_node_name],
         perm=[0, 3, 1, 2],
-        name=transpose_node_name
+        name=this_node_name
     )
 
     return transpose_node
@@ -104,11 +104,9 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     # get model input info(assume there is only one input)
     input_details = interpreter.get_input_details()
     model_input_name  = input_details[0]['name']
-    model_input_shape = input_details[0]['shape'].tolist()
     input_tensor_value_info = None
 
     # generate tree
-    #tree_graph = Tree(model_path=model_path,head_node_name='FeatureExtractor/MobilenetV2/Conv/Relu6',bottom_nodes_name=['Squeeze','convert_scores'], defused=True)
     tree_graph = Tree(model_path=model_path, head_node_name=head_node_name, bottom_nodes_name=bottom_nodes_name, defused=True)
 
 
@@ -118,24 +116,22 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     # get tree node in the form of {node_name: op_node_obj}
     tree_dict = tree_graph.get_nodes()
 
-    if add_transpose_for_channel_last_first_issue is True:
-        input_tensor_value_info = helper.make_tensor_value_info(model_input_name, TensorProto.FLOAT, model_input_shape)
+
+    #############################
+    # build head transpose node #
+    #############################
+    for h_node in tree_graph.get_head_nodes():
         # transpose for channel last to channel first
-        transpose_node = build_head_transpose_node_for_channel_last_2_channel_first(input_tensor_value_info.name)
-
-        # update tables
-        onnx_node_list = [transpose_node]
-
-        for root_node in tree_graph.get_head_nodes():
-            root_node.input_nodes_name = [transpose_node.name]
-
-    else: 
-        onnx_node_list = []
-        input_tensor_value_info = helper.make_tensor_value_info(model_input_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(model_input_shape))
-
-        for root_node in tree_graph.get_head_nodes():
-            root_node.input_nodes_name = [model_input_name]
-
+        if add_transpose_for_channel_last_first_issue is True:
+            input_tensor_value_info = helper.make_tensor_value_info(model_input_name, TensorProto.FLOAT, h_node.node_input_shape.tolist())
+            h_transpose_node = build_head_transpose_node_for_channel_last_2_channel_first(input_tensor_value_info.name, h_node.node_name)
+            
+            onnx_node_list.append(h_transpose_node)
+            h_node.input_nodes_name = [h_transpose_node.name]
+        else:
+            input_tensor_value_info = helper.make_tensor_value_info(model_input_name, TensorProto.FLOAT, utils.tflite2onnx_shape_map(h_node.node_input_shape.tolist()))
+            h_node.input_nodes_name = [input_tensor_value_info.name]
+                 
 
 
     ############################
@@ -156,20 +152,22 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
 
     # sometimes, there are sub-node in one tree node, we need to find the last one
     b_nodes = [ node for node in tree_graph.get_bottom_nodes() ]
-
-
+    
+    ###############################
+    # build bottom transpose node #
+    ###############################
     for b_node in b_nodes:
 
-        # it's output node
         out_value_info = None
-        transpose_node = None
         if add_transpose_for_channel_last_first_issue is True:
             out_value_info, transpose_node = build_button_transpose_node_for_channel_first_2_channel_last( b_node.node_list[-1], b_node.node_output_shape.tolist() )
+            if transpose_node != None:
+                onnx_node_list.append(transpose_node)
         else:
             out_value_info = set_end_node(b_node.node_list[-1], b_node.node_output_shape.tolist())
         output_tensor_value_info.append(out_value_info)
-        if transpose_node != None: 
-            onnx_node_list.append(transpose_node)    
+
+                
 
 
     input_init = [input_tensor_value_info]
@@ -225,7 +223,9 @@ if __name__ == '__main__':
 
     print('-----------    start to generate  -----------')
     print('generating...')
-
+    head_node_name = None if args.head_node is None else args.head_node
+    bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else None
+    main(model_path, model_save_path , not is_release_mode, head_node_name=head_node_name , bottom_nodes_name=bottom_nodes_name)
     try:
         head_node_name = None if args.head_node is None else args.head_node
         bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else None
