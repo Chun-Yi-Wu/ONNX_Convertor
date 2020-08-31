@@ -33,8 +33,15 @@ def display_graph(tree):
 # Core Tree Structure Class
 class Tree:
     def __init__(self, model_path, bottom_nodes_name: list = list(), defused=True):
+        # init convert function map
+        self.__init_op_convert_table()
+
         # parse operator information through flatc python module
         self.__init_op_info(model_path)
+
+        # check all ops are valid 
+        self.__check_all_op_valid( len(bottom_nodes_name) == 0 )
+
 
         # parse node information through tflite interpreter (tflite interpreter can't parse operator information in our target tensorflow version 1.15)
         self.__interpreter = tf.lite.Interpreter(model_path)
@@ -53,6 +60,32 @@ class Tree:
         self.__init_graph_inputs_node()
         self.__init_graph_outputs_node()
 
+    def __init_op_convert_table(self):
+        self.op_convert_table = {
+            BuiltinOperator.CONV_2D : Convolution,
+            BuiltinOperator.DEPTHWISE_CONV_2D : DepthwiseConvolution,
+            BuiltinOperator.SOFTMAX : Softmax,
+            BuiltinOperator.RELU : Relu,
+            BuiltinOperator.RELU6 : Relu6,
+            BuiltinOperator.PRELU : PRelu,
+            BuiltinOperator.LOGISTIC : LOGISTIC,
+            BuiltinOperator.FULLY_CONNECTED : Dense,
+            BuiltinOperator.RESHAPE : Reshape,
+            BuiltinOperator.PAD : Pad,
+            BuiltinOperator.ADD : Add,
+            BuiltinOperator.MUL : Mul,
+            BuiltinOperator.CONCATENATION : Concatenation,
+            BuiltinOperator.MEAN : Mean,
+            BuiltinOperator.MAX_POOL_2D : MaxPooling2D,
+            BuiltinOperator.AVERAGE_POOL_2D : AveragePooling2D,
+            BuiltinOperator.SQUEEZE : Squeeze,
+            BuiltinOperator.RESIZE_NEAREST_NEIGHBOR : ResizeNearestNeighbor,
+            BuiltinOperator.RESIZE_BILINEAR : ResizeBilinear,
+            BuiltinOperator.L2_NORMALIZATION : L2Normalization,
+            BuiltinOperator.TRANSPOSE_CONV : TransposeConvolution,
+            BuiltinOperator.CUSTOM : NullLayer
+        }
+
     def __init_op_info(self, model_path):
         self.__tflite_ops = []
         self.__tflite_op_types = []
@@ -68,6 +101,14 @@ class Tree:
 
             self.__tflite_ops.append(op)
             self.__tflite_op_types.append(op_type)
+
+    def __check_all_op_valid(self,is_subgraph_mode):
+        for idx, op in enumerate(self.__tflite_ops):
+            if is_subgraph_mode:
+                if self.__tflite_op_types[idx] is BuiltinOperator.CUSTOM:
+                    raise ValueError("custom node found, if the node is at buttom, we recommend you use '-bottom' to delete this node")
+            if not self.__tflite_op_types[idx] in self.op_convert_table:
+                raise ValueError("unsupported op id " + str(self.__tflite_op_types[idx]))
 
     def __parse_graph(self):
         self.__nodes = dict()
@@ -240,51 +281,10 @@ class Tree:
             if True is self.__nodes[node_name].is_bottom_node:
                 self.__bottom_nodes.append(self.__nodes[node_name])
 
+
     def __node_generator(self, op, op_type, tflite_interpreter):
-        if op_type == BuiltinOperator.CONV_2D:
-            layer_obj = Convolution(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.DEPTHWISE_CONV_2D:
-            layer_obj = DepthwiseConvolution(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.SOFTMAX:
-            layer_obj = Softmax(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.RELU:
-            layer_obj = Relu(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.RELU6:
-            layer_obj = Relu6(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.PRELU:
-            layer_obj = PRelu(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.LOGISTIC:
-            layer_obj = LOGISTIC(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.FULLY_CONNECTED:
-            layer_obj = Dense(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.RESHAPE:
-            layer_obj = Reshape(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.PAD:
-            layer_obj = Pad(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.ADD:
-            layer_obj = Add(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.MUL:
-            layer_obj = Mul(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.CONCATENATION:
-            layer_obj = Concatenation(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.MEAN:
-            layer_obj = Mean(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.MAX_POOL_2D:
-            layer_obj = MaxPooling2D(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.AVERAGE_POOL_2D:
-            layer_obj = AveragePooling2D(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.SQUEEZE:
-            layer_obj = Squeeze(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.RESIZE_NEAREST_NEIGHBOR:
-            layer_obj = ResizeNearestNeighbor(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.RESIZE_BILINEAR:
-            layer_obj = ResizeBilinear(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.L2_NORMALIZATION:
-            layer_obj = L2Normalization(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.TRANSPOSE_CONV:
-            layer_obj = TransposeConvolution(op, op_type, tflite_interpreter)
-        elif op_type == BuiltinOperator.CUSTOM:
-            layer_obj = NullLayer(op, op_type, tflite_interpreter)
+        if op_type in self.op_convert_table: 
+            layer_obj = self.op_convert_table[op_type](op, op_type, tflite_interpreter)
         else:
             raise ValueError(op_type)
 
