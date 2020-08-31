@@ -32,7 +32,7 @@ def display_graph(tree):
 
 # Core Tree Structure Class
 class Tree:
-    def __init__(self, model_path, head_node_name: str = None, bottom_nodes_name: list = None, defused=True):
+    def __init__(self, model_path, bottom_nodes_name: list = list(), defused=True):
         # parse operator information through flatc python module
         self.__init_op_info(model_path)
 
@@ -46,8 +46,8 @@ class Tree:
         self.__init_outputs_node_info()
 
         # cut tree if user assign target nodes
-        if head_node_name != None and bottom_nodes_name != None:
-            self.__generate_subtree(head_nodes_name=[head_node_name], bottom_nodes_name=bottom_nodes_name)
+        # currently only support setup sub-graph output node
+        self.__generate_subtree(head_nodes_name=[], bottom_nodes_name=bottom_nodes_name)
 
         self.__defused(enable_defuse=defused)
         self.__init_graph_inputs_node()
@@ -296,8 +296,8 @@ class Tree:
         node_id_dict = {}
         node_list = []
 
-        source_bfs_set = None
-        target_bfs_set = None
+        source_bfs_set = set()
+        target_bfs_set = set()
 
         for idx, node_name in enumerate(nodes):
             node_id_dict[node_name] = idx
@@ -314,20 +314,12 @@ class Tree:
         # do source bfs and union
         for source_node in source_nodes:
             bfs_set = set(graph.subcomponent(node_id_dict[source_node], mode='out'))
-
-            if source_bfs_set is None:
-                source_bfs_set = bfs_set
-            else:
-                source_bfs_set = source_bfs_set.union(bfs_set)
+            source_bfs_set = source_bfs_set.union(bfs_set)
 
         # do target bfs and union
         for target_node in target_nodes:
             bfs_set = set(graph.subcomponent(node_id_dict[target_node], mode='in'))
-
-            if target_bfs_set is None:
-                target_bfs_set = bfs_set
-            else:
-                target_bfs_set = target_bfs_set.union(bfs_set)
+            target_bfs_set = target_bfs_set.union(bfs_set)
 
         sub_graph_nodes_set = source_bfs_set.intersection(target_bfs_set)
 
@@ -335,10 +327,19 @@ class Tree:
 
         return sub_graph_nodes
 
-    def __generate_subtree(self, head_nodes_name: list = None, bottom_nodes_name: list =None):
-        if (head_nodes_name is None) or (bottom_nodes_name is None):
+    def __generate_subtree(self, head_nodes_name: list, bottom_nodes_name: list):
+        # return when not setup sub-graph
+        if (0 == len(head_nodes_name)) and (0 == len(bottom_nodes_name)):
             return
+        else:
+            # init sub-graph necessary head_nodes_name/bottom_nodes_name
+            if 0 == len(head_nodes_name):
+                head_nodes_name = [node.node_name for node in self.get_head_nodes()]
 
+            if 0 == len(bottom_nodes_name):
+                bottom_nodes_name = [node.node_name for node in self.get_bottom_nodes()]
+
+        # check setup sub-graph is legal
         for node_name in (head_nodes_name + bottom_nodes_name):
             if not self.__check_node_in_tree(node_name):
                 raise ValueError('Sub-Graph Error: Node {} not exist in tflite model'.format(node_name))
@@ -384,9 +385,11 @@ class Tree:
         return node_name in self.__nodes.keys()
 
     def get_head_nodes(self):
+        self.__init_graph_inputs_node()
         return self.__head_nodes
 
     def get_bottom_nodes(self):
+        self.__init_graph_outputs_node()
         return self.__bottom_nodes
 
     def get_sequential_nodes_key(self):
@@ -400,8 +403,7 @@ class Tree:
 ####################
 # tree_graph = Tree(
 #     model_path='/home/andy_huang/data/tf_detection_model_zoo/coco_trained_models/ssd_inception_v2_coco/ssd_inception_v2_coco_2018_01_28/saved_model_ssd/model.tflite',
-#     head_node_name='FeatureExtractor/InceptionV2/InceptionV2/Mixed_3b/Branch_1/Conv2d_0a_1x1/Relu6',
-#     bottom_nodes_name=['FeatureExtractor/InceptionV2/InceptionV2/Mixed_3c/Branch_1/Conv2d_0a_1x1/Relu6', 'FeatureExtractor/InceptionV2/InceptionV2/Mixed_3c/Branch_1/Conv2d_0b_3x3/Relu6'],
+#     bottom_nodes_name=['FeatureExtractor/InceptionV2/InceptionV2/Mixed_3c/Branch_1/Conv2d_0a_1x1/Relu6', 'FeatureExtractor/InceptionV2/InceptionV2/Mixed_3c/Branch_3/Conv2d_0b_1x1/Relu6'],
 #     defused=True
 # )
 # print(tree_graph.get_nodes())

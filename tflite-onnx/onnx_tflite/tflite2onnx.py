@@ -90,7 +90,7 @@ def build_head_transpose_node_for_channel_last_2_channel_first(input_name, trans
 
     return transpose_node
 
-def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue = True, head_node_name = None, bottom_nodes_name = None):
+def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue = True, bottom_nodes_name = None):
 
     onnx_weight_node_list = []
     output_tensor_value_info = []
@@ -107,7 +107,7 @@ def main(model_path, model_save_path, add_transpose_for_channel_last_first_issue
     input_tensor_value_info = None
 
     # generate tree
-    tree_graph = Tree(model_path=model_path, head_node_name=head_node_name, bottom_nodes_name=bottom_nodes_name, defused=True)
+    tree_graph = Tree(model_path=model_path, bottom_nodes_name=bottom_nodes_name, defused=True)
 
 
     # get sequential node name
@@ -198,7 +198,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='convert a tflite model into an onnx file.')
     parser.add_argument('-tflite', metavar='tflite model path', help='an input tflite file path')
     parser.add_argument('-save_path', metavar='saved model path', help='an output onnx file path')
-    parser.add_argument('-head_node', metavar='head node you want', help='a node name in tflite model which is the start node of sub-graph')
     parser.add_argument('-bottom_nodes', metavar='bottom node you want', help='nodes name in tflite model which is the bottom node of sub-graph, use "," to add multiple nodes. ex:"con1,softmax2" ')
     parser.add_argument('-release_mode', metavar='is release mode', help='True if no transpose front end needed')
     args = parser.parse_args()
@@ -223,13 +222,11 @@ if __name__ == '__main__':
 
     print('-----------    start to generate  -----------')
     print('generating...')
-    head_node_name = None if args.head_node is None else args.head_node
-    bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else None
-    main(model_path, model_save_path , not is_release_mode, head_node_name=head_node_name , bottom_nodes_name=bottom_nodes_name)
+    bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else list()
+    main(model_path, model_save_path, not is_release_mode, bottom_nodes_name=bottom_nodes_name)
     try:
-        head_node_name = None if args.head_node is None else args.head_node
-        bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else None
-        main(model_path, model_save_path , not is_release_mode, head_node_name=head_node_name , bottom_nodes_name=bottom_nodes_name)
+        bottom_nodes_name = args.bottom_nodes.split(',') if args.bottom_nodes is not None else list()
+        main(model_path, model_save_path, not is_release_mode, bottom_nodes_name=bottom_nodes_name)
     except Exception as e:
         print('Error: Something Wrong')
         print(e)
