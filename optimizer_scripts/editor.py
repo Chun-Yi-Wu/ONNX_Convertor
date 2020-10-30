@@ -21,6 +21,7 @@ parser.add_argument('-o', '--output', dest='output_change', type=str, nargs='+',
 parser.add_argument('--add-conv', dest='add_conv', type=str, nargs='+', help='add nop conv using specific input')
 parser.add_argument('--add-bn', dest='add_bn', type=str, nargs='+', help='add nop bn using specific input')
 parser.add_argument('--rename-output', dest='rename_output', type=str, nargs='+', help='Rename the specific output(e.g. --rename-output old_name new_name)')
+parser.add_argument('--rename-op_type', dest='rename_op_type', type=str, nargs='+', help='Rename the specific op type(e.g. --rename-op_type old_name new_name)')
 
 args = parser.parse_args()
 
@@ -87,5 +88,15 @@ replacing.replace_initializer_with_Constant(g)
 other.topological_sort(g)
 # Polish and output
 m = onnx.utils.polish_model(m)
+
+# Rename op type
+g = m.graph
+if args.rename_op_type:
+    if len(args.rename_op_type) % 2 != 0:
+        print("Rename output should be paires of names.")
+    else:
+        for i in range(0, len(args.rename_op_type), 2):
+            replacing.replace_op_type_to_custom(g, args.rename_op_type[i], args.rename_op_type[i + 1])
+
 other.add_output_to_value_info(m.graph)
 onnx.save(m, args.out_file)

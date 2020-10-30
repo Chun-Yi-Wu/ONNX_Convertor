@@ -610,3 +610,17 @@ def replace_mul_to_bn(g):
 
     topological_sort(g)
 
+def replace_op_type_to_custom(g, target_type , custom_type_name):
+    """
+    Replace Reshape node into Flatten node if applicable.
+
+    :param g: the onnx graph
+    """
+
+    for node in g.node:
+        
+        if node.op_type != target_type:
+            continue
+        node.op_type = custom_type_name
+        
+
